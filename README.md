@@ -19,7 +19,11 @@ FIX PV handelt als bevollmächtigter Dienstleister, nicht als Organisator.
 | Automatische EDA-Anbindung (E-Mail/KEP) | Stufe 2 |
 | Mailversand, SEPA-Lastschrift | später, nach Freigabe |
 
-## Starten
+## Starten unter Windows
+
+Doppelklick auf `Nachbarstrom starten.bat`. Beim ersten Start wird alles eingerichtet (Python muss installiert sein). Das Passwort für die Verwaltung wird bei jedem Start abgefragt und nicht gespeichert. Die Daten liegen in `nachbarstrom.db` im selben Ordner.
+
+## Starten (Linux/macOS)
 
 ```bash
 python -m venv .venv && . .venv/bin/activate
