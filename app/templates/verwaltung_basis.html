@@ -1,2 +1,11 @@
 {% extends "basis.html" %}
-{% block nav %}<nav><a href="/verwaltung">Übersicht</a><a href="/verwaltung/teilnehmer">Teilnehmer</a><a href="/verwaltung/matching">Matching</a><a href="/verwaltung/erinnerungen">Erinnerungen</a><a href="/verwaltung/postausgang">Postausgang</a></nav>{% endblock %}
+{% block markenlink %}/verwaltung{% endblock %}
+{% block nav %}{% set p = request.url.path %}<nav>
+<a href="/verwaltung" class="{{ 'aktiv' if p == '/verwaltung' }}">Übersicht</a>
+<a href="/verwaltung/teilnehmer" class="{{ 'aktiv' if p.startswith('/verwaltung/teilnehmer') }}">Teilnehmer</a>
+<a href="/verwaltung/matching" class="{{ 'aktiv' if p.startswith('/verwaltung/matching') }}">Matching</a>
+<a href="/verwaltung/energiedaten" class="{{ 'aktiv' if p.startswith('/verwaltung/energiedaten') }}">Energiedaten</a>
+<a href="/verwaltung/rechnungen" class="{{ 'aktiv' if p.startswith('/verwaltung/rechnung') }}">Rechnungen</a>
+<a href="/verwaltung/erinnerungen" class="{{ 'aktiv' if p.startswith('/verwaltung/erinnerungen') }}">Erinnerungen</a>
+<a href="/verwaltung/postausgang" class="{{ 'aktiv' if p.startswith('/verwaltung/postausgang') }}">Postausgang</a>
+</nav>{% endblock %}

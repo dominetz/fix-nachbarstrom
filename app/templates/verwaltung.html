@@ -1,24 +1,51 @@
 {% extends "verwaltung_basis.html" %}
+{% import "_status.html" as status %}
 {% block inhalt %}
 <h1>Übersicht</h1>
-<div class="raster">
-<div class="karte"><b>{{ erzeuger }}</b> Erzeuger angemeldet</div>
-<div class="karte"><b>{{ abnehmer }}</b> Abnehmer angemeldet</div>
-<div class="karte"><b>{{ zeilen|length }}</b> Gruppen</div>
-<div class="karte"><a href="/verwaltung/erinnerungen"><b>{{ anzahl_erinnerungen }}</b> Erinnerungen heute fällig</a></div>
-<div class="karte"><a href="/verwaltung/postausgang"><b>{{ k.postausgang }}</b> Mails im Postausgang</a></div>
+<p class="unter">{{ erzeuger }} Erzeuger und {{ abnehmer }} Abnehmer angemeldet{% if gesamt %} · Energiedaten bis {{ gesamt.bis.strftime("%d.%m.%Y") }}{% endif %}</p>
+
+{% if testmodus %}
+<div class="karte" style="border-color:#bcd9b2;background:var(--gruen-hell)">
+<h2>Testbetrieb: so probierst du alles aus</h2>
+<p class="klein" style="margin-top:-6px">Alle Personen, Zählpunkte und Werte sind erfunden. Fiktives Jahr Oktober 2025 bis September 2026.</p>
+<ol style="margin:0;padding-left:20px">
+<li><b>Erst probieren, was fehlt:</b> in <a href="/verwaltung/gruppe/1#abrechnung">Gruppe 1</a> „Rechnungen erstellen“ für September 2026 klicken. Die Plattform meldet, dass die Energiedaten fehlen.</li>
+<li><b>Energiedaten importieren:</b> unter <a href="/verwaltung/energiedaten">Energiedaten</a> bei „Fiktive Testdateien“ die beiden Dateien für September 2026 (Gruppe 1 und 2) herunterladen und zusammen wieder hochladen, so wie später den echten Export aus dem EDA-Portal.</li>
+<li><b>Monatsabrechnung:</b> in <a href="/verwaltung/gruppe/1#abrechnung">Gruppe 1</a> jetzt nochmal „Rechnungen erstellen“ für September 2026.</li>
+<li><b>Jahresabrechnung:</b> in <a href="/verwaltung/gruppe/2#abrechnung">Gruppe 2</a> die Jahresrechnung Oktober 2025 bis September 2026 erstellen.</li>
+<li><b>Rechnung ansehen:</b> mit QR-Code, als PDF drucken. Unter <a href="/verwaltung/rechnungen">Rechnungen</a> Zahlungen abhaken und eine Zahlungserinnerung erzeugen.</li>
+<li><b>Kundenbereich:</b> in einer Gruppe auf einen Namen klicken, so sieht es der Kunde.</li>
+<li><b>Neue Gruppe:</b> unter <a href="/verwaltung/matching">Matching</a> wartet ein Vorschlag, unter <a href="/verwaltung/erinnerungen">Erinnerungen</a> eine fällige Erinnerung.</li>
+</ol>
 </div>
-<h2>Kennzahlen</h2>
+{% endif %}
+
 <div class="raster">
-<div class="karte"><b>{{ k.aktive_gruppen }}</b> aktive Gruppen</div>
-<div class="karte"><b>{{ k.zaehlpunkte_aktiv }}</b> Zählpunkte in aktiven Gruppen</div>
-<div class="karte"><b>{{ k.kwh_erwartet|zahl }}</b> kWh/Jahr erwartet (berechnet)</div>
-<div class="karte"><b>{{ k.kwh_abgerechnet|zahl }}</b> kWh abgerechnet</div>
-<div class="karte"><b>{{ k.umsatz_abgerechnet|zahl(2) }} €</b> an Erzeuger abgerechnet</div>
+<a class="kpi" href="#gruppen"><div class="wert">{{ k.aktive_gruppen }}</div><div class="label">aktive Gruppen · {{ k.zaehlpunkte_aktiv }} Zählpunkte</div></a>
+<div class="kpi"><div class="wert">{{ k.geteilt|zahl }} <small>kWh</small></div><div class="label">geteilt in 12 Monaten · {{ k.quote|zahl }} % der Einspeisung</div></div>
+<a class="kpi" href="/verwaltung/rechnungen"><div class="wert">{{ k.umsatz|zahl(2) }} <small>€</small></div><div class="label">abgerechnet in 12 Monaten (für die Erzeuger)</div></a>
+<a class="kpi" href="/verwaltung/rechnungen?filter=überfällig"><div class="wert">{{ k.offen|zahl(2) }} <small>€</small></div><div class="label">offen{% if k.ueberfaellig %} · <span class="badge rot">{{ k.ueberfaellig }} überfällig</span>{% endif %}</div></a>
 </div>
-<h2>Gruppen</h2>
-<table><tr><th>Nr.</th><th>Erzeuger</th><th>Status</th><th>Erwartet kWh/Jahr</th><th>Zone</th></tr>
-{% for g, e in zeilen %}<tr><td><a href="/verwaltung/gruppe/{{ g.id }}">{{ g.id }}</a></td><td>{{ e.name }}, {{ e.ort }}</td><td>{{ status_text[g.status] }}</td><td>{{ g.erwartete_kwh_jahr|zahl }}</td><td>{{ g.zonelevel }}</td></tr>
-{% else %}<tr><td colspan="5">Noch keine Gruppen. Vorschläge gibt es unter <a href="/verwaltung/matching">Matching</a>.</td></tr>{% endfor %}
-</table>
+
+<div class="zwei">
+<div class="karte"><h2>Geteilter Sonnenstrom je Monat</h2>
+{% if gesamt %}{{ gesamt.diagramm|safe }}{% else %}<p class="klein">Noch keine Energiedaten. Sie kommen aus dem EDA-Export, siehe <a href="/verwaltung/energiedaten">Energiedaten</a>.</p>{% endif %}
+</div>
+<div class="karte"><h2>Zu tun</h2>
+<ul class="aufgaben">
+{% for g, e, von, bis, moeglich in faellig %}{% if moeglich %}<li><span>Abrechnung Gruppe {{ g.id }} ({{ e.name }}): {{ von.strftime("%d.%m.%Y") }} – {{ bis.strftime("%d.%m.%Y") }}</span><a class="knopf klein-knopf" href="/verwaltung/gruppe/{{ g.id }}#abrechnung">Abrechnen</a></li>
+{% else %}<li><span class="klein">Gruppe {{ g.id }}: nächste Abrechnung bis {{ bis.strftime("%d.%m.%Y") }}, Energiedaten fehlen noch</span><a class="knopf zweit klein-knopf" href="/verwaltung/energiedaten">Importieren</a></li>{% endif %}{% endfor %}
+{% if k.ueberfaellig %}<li><span>{{ k.ueberfaellig }} Rechnung(en) überfällig</span><a class="knopf zweit klein-knopf" href="/verwaltung/rechnungen?filter=überfällig">Ansehen</a></li>{% endif %}
+{% if anzahl_erinnerungen %}<li><span>{{ anzahl_erinnerungen }} Erinnerung(en) an die Zustimmung im Netzportal</span><a class="knopf zweit klein-knopf" href="/verwaltung/erinnerungen">Ansehen</a></li>{% endif %}
+{% if k.postausgang %}<li><span>{{ k.postausgang }} Mail(s) im Postausgang</span><a class="knopf zweit klein-knopf" href="/verwaltung/postausgang">Ansehen</a></li>{% endif %}
+{% if k.frei %}<li><span>{{ k.frei }} Teilnehmer ohne Gruppe</span><a class="knopf zweit klein-knopf" href="/verwaltung/matching">Matching</a></li>{% endif %}
+{% if not (faellig or k.ueberfaellig or anzahl_erinnerungen or k.postausgang or k.frei) %}<li class="klein">Nichts offen.</li>{% endif %}
+</ul></div>
+</div>
+
+<div class="karte" id="gruppen"><h2>Gruppen</h2>
+<div class="tabelle"><table><tr><th>Nr.</th><th>Erzeuger</th><th>Status</th><th class="zahl">Erwartet kWh/Jahr</th><th>Zone</th><th>Rechnung</th><th class="zahl">Preis</th></tr>
+{% for g, e in zeilen %}<tr><td><a href="/verwaltung/gruppe/{{ g.id }}">{{ g.id }}</a></td><td><a href="/verwaltung/gruppe/{{ g.id }}">{{ e.name }}</a><br><span class="klein">{{ e.ort }} · {{ e.anlage_kwp|zahl(1) }} kWp</span></td><td>{{ status.gruppe(g.status) }}</td><td class="zahl">{{ g.erwartete_kwh_jahr|zahl }}</td><td>{{ g.zonelevel }}</td><td>{{ "monatlich" if g.rechnung_monatlich else "jährlich" }}</td><td class="zahl">{{ g.preis_ct_kwh|zahl(2) }} ct</td></tr>
+{% else %}<tr><td colspan="7">Noch keine Gruppen. Vorschläge gibt es unter <a href="/verwaltung/matching">Matching</a>.</td></tr>{% endfor %}
+</table></div></div>
 {% endblock %}

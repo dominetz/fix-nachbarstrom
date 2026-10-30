@@ -51,3 +51,13 @@ def preisaenderung(t: Teilnehmer, gruppe_id: int, alt: str, neu: str, ab: date, 
                           f"Sind Sie nicht einverstanden, können Sie bis zu diesem Tag widersprechen "
                           f"oder den Vertrag kostenlos kündigen. Eine Antwort auf diese Mail genügt.\n\n"
                           f"Ihr Bereich: {link}{GRUSS}")
+
+
+def zahlungserinnerung(t: Teilnehmer, gruppe_id: int, nummer: str, brutto: str, faellig: date,
+                       link: str) -> Nachricht:
+    return Nachricht(teilnehmer_id=t.id, gruppe_id=gruppe_id, art="zahlungserinnerung",
+                     betreff=f"{MARKE}: Zahlungserinnerung zu Rechnung {nummer}",
+                     text=f"Hallo {t.vorname},\n\nfür Ihre Rechnung {nummer} über {brutto} € (fällig am "
+                          f"{faellig:%d.%m.%Y}) haben wir noch keinen Zahlungseingang gesehen. Vielleicht ist sie "
+                          f"untergegangen. Hier können Sie sie ansehen und mit dem QR-Code bezahlen:\n{link}\n\n"
+                          f"Haben Sie schon überwiesen? Dann ist diese Mail hinfällig.{GRUSS}")

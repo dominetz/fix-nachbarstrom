@@ -2,7 +2,8 @@
 
 Öffentlich: Anmeldung, Einladungslink, Unterschrift, persönlicher Bereich je Teilnehmer.
 Verwaltung (Passwort): Matching, Gruppen, Unterlagen für ebUtilities/EDA,
-Erinnerungen, Postausgang, Preisänderung, Abrechnung.
+Erinnerungen, Postausgang, Preisänderung, Energiedaten aus dem EDA-Export,
+Abrechnung mit Zahlungsstatus.
 """
 import hashlib
 import hmac
@@ -12,15 +13,15 @@ from datetime import date, timedelta
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, Form, HTTPException, Request, UploadFile
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import inspect, text
+from sqlalchemy import delete, inspect, text
 from sqlmodel import Session, SQLModel, create_engine, select
 
-from . import abrechnung, config, matching, nachrichten, zahlung
+from . import abrechnung, auswertung, config, diagramme, energiedaten, matching, nachrichten, zahlung
 from .erinnerungen import faellige_erinnerungen
-from .models import (STATUS_TEXT, Einladung, Gruppe, GruppenStatus, Mitglied,
+from .models import (STATUS_TEXT, Einladung, Gruppe, GruppenStatus, Messwert, Mitglied,
                      Nachricht, Profiltyp, Rechnung, Rolle, Teilnehmer, Unterschrift,
                      Zustimmung, jetzt)
 from .zaehlpunkt import ist_gueltig, maskiert, netzbetreiber_code, normalisieren
@@ -51,8 +52,17 @@ def _spalten_ergaenzen():
 
 app = FastAPI(title=config.MARKE, lifespan=_lebenszyklus)
 vorlagen = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
+
+
+def rechnung_status(r: Rechnung, heute: date | None = None) -> str:
+    if r.bezahlt_am:
+        return "bezahlt"
+    return "überfällig" if (heute or date.today()) > r.faellig else "offen"
+
+
 vorlagen.env.globals.update(marke=config.MARKE, dienstleister=config.DIENSTLEISTER,
-                            status_text=STATUS_TEXT, maskiert=maskiert)
+                            status_text=STATUS_TEXT, maskiert=maskiert, rechnung_status=rechnung_status,
+                            monatsname=diagramme.monatsname)
 vorlagen.env.filters["zahl"] = lambda x, s=0: f"{x:,.{s}f}".replace(",", "X").replace(".", ",").replace("X", ".")
 sicherheit = HTTPBasic(auto_error=True)
 
@@ -257,25 +267,63 @@ def uebersicht(request: Request, s: Session = Depends(sitzung), _=Depends(verwal
     zeilen = [(g, s.get(Teilnehmer, g.erzeuger_id)) for g in gruppen]
     aktiv = [g for g in gruppen if g.status == GruppenStatus.AKTIV]
     rechnungen = s.exec(select(Rechnung)).all()
+    heute = date.today()
+    erzeuger_aktiv, abnehmer_aktiv = [], []
+    for g in aktiv:
+        d = _gruppen_daten(s, g)
+        erzeuger_aktiv.append(d["erzeuger"])
+        abnehmer_aktiv += [t for _, t in d["abnehmer"]]
+    gesamt = _auswertung_mehrere(s, erzeuger_aktiv, abnehmer_aktiv)
+    offen = [r for r in rechnungen if not r.bezahlt_am]
+    belegt = _in_aktiver_gruppe(s)
     kennzahlen = {
         "aktive_gruppen": len(aktiv),
-        "zaehlpunkte_aktiv": len(aktiv) + sum(len(s.exec(select(Mitglied).where(Mitglied.gruppe_id == g.id)).all())
-                                              for g in aktiv),
-        "kwh_erwartet": sum(g.erwartete_kwh_jahr for g in aktiv),
-        "kwh_abgerechnet": sum(r.kwh for r in rechnungen),
-        "umsatz_abgerechnet": sum(r.brutto for r in rechnungen),
+        "zaehlpunkte_aktiv": len(erzeuger_aktiv) + len(abnehmer_aktiv),
+        "geteilt": gesamt["geteilt"] if gesamt else 0,
+        "quote": gesamt["geteilt"] / gesamt["einspeisung"] * 100 if gesamt and gesamt["einspeisung"] else 0,
+        "umsatz": sum(r.brutto for r in rechnungen if gesamt and r.bis > gesamt["bis"] - timedelta(days=365)),
+        "offen": sum(r.brutto for r in offen),
+        "ueberfaellig": sum(1 for r in offen if rechnung_status(r, heute) == "überfällig"),
         "postausgang": len(s.exec(select(Nachricht).where(Nachricht.gesendet_am == None)).all()),  # noqa: E711
+        "frei": sum(1 for t in teilnehmer if t.id not in belegt),
     }
+    faellig = []  # Gruppen, für die eine Abrechnung möglich ist
+    for g in aktiv:
+        von, bis = abrechnungs_vorschlag(s, g)
+        e = s.get(Teilnehmer, g.erzeuger_id)
+        letzter = auswertung.letzter_tag(s, [e.zaehlpunkt])
+        faellig.append((g, e, von, bis, bool(letzter and letzter >= bis)))
+    testmodus = any(t.email.endswith("@example.com") for t in teilnehmer)
     return _seite(request, "verwaltung.html", zeilen=zeilen, teilnehmer=teilnehmer, k=kennzahlen,
-                  anzahl_erinnerungen=len(erinnerungen),
+                  anzahl_erinnerungen=len(erinnerungen), gesamt=gesamt, faellig=faellig, testmodus=testmodus,
                   erzeuger=sum(1 for t in teilnehmer if t.rolle == Rolle.ERZEUGER),
                   abnehmer=sum(1 for t in teilnehmer if t.rolle == Rolle.ABNEHMER))
 
 
+def _auswertung_mehrere(s: Session, erzeuger: list[Teilnehmer], abnehmer: list[Teilnehmer]) -> dict | None:
+    """Wie _auswertung, aber über mehrere Gruppen zusammen."""
+    zps_e, zps_a = [e.zaehlpunkt for e in erzeuger], [a.zaehlpunkt for a in abnehmer]
+    bis = auswertung.letzter_tag(s, zps_e + zps_a)
+    if not bis:
+        return None
+    m = auswertung.monatswerte(s, zps_e + zps_a)
+    schluessel = _mit_daten(auswertung.monatsschluessel(bis), m)
+
+    def reihe(zps, feld):
+        return [sum(m.get(zp, {}).get(k, {}).get(feld, 0.0) for zp in zps) for k in schluessel]
+
+    einspeisung, rest = reihe(zps_e, "erzeugung"), reihe(zps_e, "restueberschuss")
+    geteilt = [e - r for e, r in zip(einspeisung, rest)]
+    return {"bis": bis, "einspeisung": sum(einspeisung), "geteilt": sum(geteilt),
+            "diagramm": diagramme.balken([diagramme.monatsname(k) for k in schluessel], [
+                ("An Abnehmer geteilt", "--reihe-1", geteilt), ("Rest ins Netz eingespeist", "--reihe-grau", rest)])}
+
+
 @app.get("/verwaltung/teilnehmer", response_class=HTMLResponse)
 def teilnehmer_liste(request: Request, s: Session = Depends(sitzung), _=Depends(verwaltung)):
-    return _seite(request, "teilnehmer.html", liste=s.exec(select(Teilnehmer).order_by(Teilnehmer.erstellt)).all(),
-                  in_gruppe=_in_aktiver_gruppe(s))
+    liste = s.exec(select(Teilnehmer).order_by(Teilnehmer.erstellt)).all()
+    return _seite(request, "teilnehmer.html", liste=liste, in_gruppe=_in_aktiver_gruppe(s),
+                  bereiche={t.id: kundenlink(t.id) for t in liste})
 
 
 @app.get("/verwaltung/matching", response_class=HTMLResponse)
@@ -322,10 +370,67 @@ def gruppe_anlegen(s: Session = Depends(sitzung), _=Depends(verwaltung),
     return RedirectResponse(f"/verwaltung/gruppe/{g.id}", status_code=303)
 
 
+def _auswertung(s: Session, erzeuger: Teilnehmer | None, abnehmer: list[Teilnehmer],
+                bis: date | None = None) -> dict | None:
+    """Kennzahlen und Monatsdiagramm der letzten zwölf Monate mit Daten."""
+    zps = ([erzeuger.zaehlpunkt] if erzeuger else []) + [a.zaehlpunkt for a in abnehmer]
+    bis = bis or auswertung.letzter_tag(s, zps)
+    if not bis:
+        return None
+    m = auswertung.monatswerte(s, zps)
+    schluessel = _mit_daten(auswertung.monatsschluessel(bis), m)
+
+    def reihe(zp_liste, feld):
+        return [sum(m.get(zp, {}).get(k, {}).get(feld, 0.0) for zp in zp_liste) for k in schluessel]
+
+    ab = [a.zaehlpunkt for a in abnehmer]
+    verbrauch, geteilt = reihe(ab, "verbrauch"), reihe(ab, "eigendeckung")
+    ergebnis = {"bis": bis, "monate": schluessel, "verbrauch": sum(verbrauch), "geteilt": sum(geteilt),
+                "netzbezug": sum(verbrauch) - sum(geteilt)}
+    beschriftung = [diagramme.monatsname(k) for k in schluessel]
+    if erzeuger:
+        einspeisung, rest = reihe([erzeuger.zaehlpunkt], "erzeugung"), reihe([erzeuger.zaehlpunkt], "restueberschuss")
+        ergebnis.update(einspeisung=sum(einspeisung), rest=sum(rest))
+        ergebnis["diagramm"] = diagramme.balken(beschriftung, [
+            ("An Abnehmer geteilt", "--reihe-1", [e - r for e, r in zip(einspeisung, rest)]),
+            ("Rest ins Netz eingespeist", "--reihe-grau", rest)])
+    else:
+        ergebnis["diagramm"] = diagramme.balken(beschriftung, [
+            ("Sonnenstrom vom Nachbarn", "--reihe-1", geteilt),
+            ("Strom vom eigenen Lieferanten", "--reihe-grau", [v - g for v, g in zip(verbrauch, geteilt)])])
+    ergebnis["je_zp"] = {zp: {f: sum(m.get(zp, {}).get(k, {}).get(f, 0.0) for k in schluessel)
+                              for f in energiedaten.FELDER} for zp in zps}
+    return ergebnis
+
+
+def _mit_daten(schluessel: list[str], monatswerte: dict) -> list[str]:
+    """Monate vor dem ersten Monat mit Daten weglassen (junge Gruppen)."""
+    erster = min((k for werte in monatswerte.values() for k in werte), default=schluessel[0])
+    return [k for k in schluessel if k >= erster]
+
+
+def _tagesdiagramm(s: Session, erzeuger: Teilnehmer, abnehmer: list[Teilnehmer], tag: date) -> str:
+    werte = auswertung.tageswerte(s, [erzeuger.zaehlpunkt] + [a.zaehlpunkt for a in abnehmer], tag)
+    summe = lambda feld: [sum(werte[a.zaehlpunkt][feld][q] for a in abnehmer) for q in range(96)]  # noqa: E731
+    return diagramme.tageskurve([
+        ("Einspeisung Erzeuger", "--reihe-3", werte[erzeuger.zaehlpunkt]["erzeugung"], False),
+        ("Verbrauch der Abnehmer", "--reihe-2", summe("verbrauch"), False),
+        ("Geteilt", "--reihe-1", summe("eigendeckung"), True)])
+
+
 @app.get("/verwaltung/gruppe/{gid}", response_class=HTMLResponse)
-def gruppe_seite(request: Request, gid: int, s: Session = Depends(sitzung), _=Depends(verwaltung)):
+def gruppe_seite(request: Request, gid: int, s: Session = Depends(sitzung), _=Depends(verwaltung),
+                 tag: date | None = None):
     g = s.get(Gruppe, gid) or _404()
     d = _gruppen_daten(s, g)
+    abnehmer = [t for _, t in d["abnehmer"]]
+    a = _auswertung(s, d["erzeuger"], abnehmer)
+    tagesdiagramm = None
+    if a:
+        tag = tag or auswertung.bester_tag(s, d["erzeuger"].zaehlpunkt, a["monate"][max(0, len(a["monate"]) - 4)]) \
+            or a["bis"]
+        tagesdiagramm = _tagesdiagramm(s, d["erzeuger"], abnehmer, tag)
+    vorschlag = abrechnungs_vorschlag(s, g)
     alle = [d["erzeuger"]] + [t for _, t in d["abnehmer"]]
     unterschriften = {u.teilnehmer_id for u in s.exec(select(Unterschrift).where(
         Unterschrift.gruppe_id == gid, Unterschrift.dokument == "vertrag")).all()}
@@ -336,7 +441,7 @@ def gruppe_seite(request: Request, gid: int, s: Session = Depends(sitzung), _=De
     namen = {t.id: t.name for t in alle}
     return _seite(request, "gruppe.html", g=g, alle=alle, unterschriften=unterschriften, links=links,
                   zustimmungen=zustimmungen, rechnungen=rechnungen, stati=list(GruppenStatus), namen=namen,
-                  bereiche=bereiche,
+                  bereiche=bereiche, a=a, tag=tag, tagesdiagramm=tagesdiagramm, vorschlag=vorschlag,
                   frueheste_aenderung=date.today() + timedelta(days=31), **d)
 
 
@@ -437,23 +542,87 @@ async def abrechnen(request: Request, gid: int, report: UploadFile, s: Session =
         if not t:
             uebersprungen.append(maskiert(z.zaehlpunkt))
             continue
-        nummer = abrechnung.rechnungsnummer(g.id, t.id, z.bis)
-        if s.exec(select(Rechnung).where(Rechnung.nummer == nummer)).first():
-            uebersprungen.append(f"{nummer} (gibt es schon)")
+        r = rechnung_anlegen(s, g, t, z.von, z.bis, z.kwh)
+        if not r:
+            uebersprungen.append(f"{abrechnung.rechnungsnummer(g.id, t.id, z.bis)} (gibt es schon)")
             continue
-        preis = preis_fuer(g, z.von)
-        b = abrechnung.berechnen(z.kwh, preis, g.ust_satz)
-        heute = date.today()
-        r = Rechnung(nummer=nummer, gruppe_id=g.id, abnehmer_id=t.id, von=z.von, bis=z.bis, kwh=z.kwh,
-                     preis_ct_kwh=preis, ust_satz=g.ust_satz, netto=b.netto, ust=b.ust,
-                     brutto=b.brutto, datum=heute, faellig=abrechnung.faelligkeit(heute))
-        s.add(r)
-        s.flush()
-        s.add(nachrichten.rechnung(t, g.id, nummer, _euro(b.brutto), r.faellig,
-                                   f"{kundenlink(t.id)}/rechnung/{r.id}"))
         neu += 1
     s.commit()
-    return _seite(request, "abrechnung_ergebnis.html", g=g, neu=neu, uebersprungen=uebersprungen)
+    return _seite(request, "abrechnung_ergebnis.html", g=g, neu=neu, uebersprungen=uebersprungen, rechnungen=[])
+
+
+def rechnung_anlegen(s: Session, g: Gruppe, t: Teilnehmer, von: date, bis: date, kwh: float,
+                     datum: date | None = None, mail: bool = True) -> Rechnung | None:
+    """Eine Rechnung im Namen des Erzeugers. None, wenn es sie für den Zeitraum schon gibt."""
+    nummer = abrechnung.rechnungsnummer(g.id, t.id, bis)
+    if s.exec(select(Rechnung).where(Rechnung.nummer == nummer)).first():
+        return None
+    preis = preis_fuer(g, von)
+    b = abrechnung.berechnen(kwh, preis, g.ust_satz)
+    datum = datum or date.today()
+    r = Rechnung(nummer=nummer, gruppe_id=g.id, abnehmer_id=t.id, von=von, bis=bis, kwh=round(kwh, 3),
+                 preis_ct_kwh=preis, ust_satz=g.ust_satz, netto=b.netto, ust=b.ust,
+                 brutto=b.brutto, datum=datum, faellig=abrechnung.faelligkeit(datum))
+    s.add(r)
+    s.flush()
+    if mail:
+        s.add(nachrichten.rechnung(t, g.id, nummer, _euro(b.brutto), r.faellig,
+                                   f"{kundenlink(t.id)}/rechnung/{r.id}"))
+    return r
+
+
+def abrechnungs_vorschlag(s: Session, g: Gruppe) -> tuple[date, date]:
+    """Nächster offener Zeitraum: ab dem Tag nach der letzten Rechnung, ein Monat oder ein Jahr."""
+    letzte = s.exec(select(Rechnung.bis).where(Rechnung.gruppe_id == g.id).order_by(Rechnung.bis.desc())).first()
+    erzeuger = s.get(Teilnehmer, g.erzeuger_id)
+    erster = auswertung.erster_tag(s, [erzeuger.zaehlpunkt])
+    von = letzte + timedelta(days=1) if letzte else (g.aktiv_seit or erster or date.today().replace(day=1))
+    if g.rechnung_monatlich:
+        bis = energiedaten.monate(von, von)[0][1]
+    else:
+        bis = von.replace(year=von.year + 1) - timedelta(days=1)
+    return von, bis
+
+
+@app.post("/verwaltung/gruppe/{gid}/abrechnungslauf", response_class=HTMLResponse)
+def abrechnungslauf(request: Request, gid: int, s: Session = Depends(sitzung), _=Depends(verwaltung),
+                    von: date = Form(...), bis: date = Form(...)):
+    """Rechnungen für alle Abnehmer einer Gruppe direkt aus den gespeicherten Energiedaten."""
+    g = s.get(Gruppe, gid) or _404()
+    d = _gruppen_daten(s, g)
+    if bis < von:
+        raise HTTPException(400, "Das Ende liegt vor dem Beginn.")
+    abnehmer = [t for _, t in d["abnehmer"]]
+    werte = auswertung.summen(s, [t.zaehlpunkt for t in abnehmer], von, bis)
+    soll = ((bis - von).days + 1) * 96
+    fehlend = [t for t in abnehmer if werte[t.zaehlpunkt]["viertelstunden"] < soll]
+    if fehlend:
+        luecken = _fehlende_monate(s, [t.zaehlpunkt for t in fehlend], von, bis)
+        return _seite(request, "abrechnung_ergebnis.html", g=g, neu=0, uebersprungen=[], rechnungen=[],
+                      fehler=f"Für den Zeitraum fehlen Energiedaten ({', '.join(luecken)}). Bitte zuerst den "
+                             f"EDA-Export dafür unter „Energiedaten“ hochladen.")
+    neu, uebersprungen = [], []
+    for t in abnehmer:
+        r = rechnung_anlegen(s, g, t, von, bis, werte[t.zaehlpunkt]["eigendeckung"])
+        if r:
+            neu.append(r)
+        else:
+            uebersprungen.append(f"{t.name}: Rechnung für diesen Zeitraum gibt es schon")
+    s.commit()
+    namen = {t.id: t.name for t in abnehmer}
+    return _seite(request, "abrechnung_ergebnis.html", g=g, neu=len(neu), uebersprungen=uebersprungen,
+                  rechnungen=neu, namen=namen)
+
+
+def _fehlende_monate(s: Session, zaehlpunkte: list[str], von: date, bis: date) -> list[str]:
+    luecken = []
+    for erster, letzter in energiedaten.monate(von, bis):
+        a, b = max(erster, von), min(letzter, bis)
+        soll = ((b - a).days + 1) * 96
+        werte = auswertung.summen(s, zaehlpunkte, a, b)
+        if any(w["viertelstunden"] < soll for w in werte.values()):
+            luecken.append(diagramme.monatsname(f"{erster:%Y-%m}"))
+    return luecken
 
 
 @app.get("/verwaltung/rechnung/{rid}", response_class=HTMLResponse)
@@ -470,6 +639,97 @@ def _rechnung_daten(s: Session, r: Rechnung) -> dict:
         qr = zahlung.qr_svg(erzeuger.name, erzeuger.iban, r.brutto, f"Rechnung {r.nummer}")
     return {"r": r, "g": g, "abnehmer": s.get(Teilnehmer, r.abnehmer_id), "erzeuger": erzeuger, "qr": qr,
             "iban": zahlung.iban_lesbar(erzeuger.iban) if erzeuger.iban else None}
+
+
+@app.get("/verwaltung/rechnungen", response_class=HTMLResponse)
+def rechnungen_seite(request: Request, s: Session = Depends(sitzung), _=Depends(verwaltung), filter: str = ""):
+    liste = s.exec(select(Rechnung).order_by(Rechnung.datum.desc(), Rechnung.nummer)).all()
+    heute = date.today()
+    if filter:
+        liste = [r for r in liste if rechnung_status(r, heute) == filter]
+    namen = {t.id: t.name for t in s.exec(select(Teilnehmer)).all()}
+    alle = s.exec(select(Rechnung)).all()
+    summen = {st: sum(r.brutto for r in alle if rechnung_status(r, heute) == st)
+              for st in ("offen", "überfällig", "bezahlt")}
+    return _seite(request, "rechnungen.html", liste=liste, namen=namen, filter=filter, summen=summen)
+
+
+@app.post("/verwaltung/rechnung/{rid}/bezahlt")
+def rechnung_bezahlt(rid: int, s: Session = Depends(sitzung), _=Depends(verwaltung), zurueck: str = Form("")):
+    r = s.get(Rechnung, rid) or _404()
+    r.bezahlt_am = None if r.bezahlt_am else date.today()
+    s.add(r)
+    s.commit()
+    return RedirectResponse(_sicher_zurueck(zurueck), status_code=303)
+
+
+@app.post("/verwaltung/rechnung/{rid}/mahnung")
+def rechnung_mahnung(rid: int, s: Session = Depends(sitzung), _=Depends(verwaltung)):
+    r = s.get(Rechnung, rid) or _404()
+    t = s.get(Teilnehmer, r.abnehmer_id)
+    s.add(nachrichten.zahlungserinnerung(t, r.gruppe_id, r.nummer, _euro(r.brutto), r.faellig,
+                                         f"{kundenlink(t.id)}/rechnung/{r.id}"))
+    r.gemahnt_am = date.today()
+    s.add(r)
+    s.commit()
+    return RedirectResponse("/verwaltung/postausgang", status_code=303)
+
+
+def _sicher_zurueck(ziel: str) -> str:
+    return ziel if ziel.startswith("/verwaltung") else "/verwaltung/rechnungen"
+
+
+@app.get("/verwaltung/energiedaten", response_class=HTMLResponse)
+def energiedaten_seite(request: Request, s: Session = Depends(sitzung), _=Depends(verwaltung)):
+    return _seite(request, "energiedaten.html", ergebnisse=None, **_energiedaten_stand(s))
+
+
+@app.post("/verwaltung/energiedaten", response_class=HTMLResponse)
+async def energiedaten_hochladen(request: Request, dateien: list[UploadFile], s: Session = Depends(sitzung),
+                                 _=Depends(verwaltung)):
+    bekannt = {t.zaehlpunkt for t in s.exec(select(Teilnehmer)).all()}
+    ergebnisse = []
+    for datei in dateien:
+        try:
+            imp = energiedaten.export_einlesen(await datei.read())
+        except ValueError as e:
+            ergebnisse.append({"datei": datei.filename, "fehler": str(e)})
+            continue
+        zps = imp.zaehlpunkte & bekannt
+        # gleicher Zeitraum nochmal hochgeladen: alte Werte ersetzen
+        s.exec(delete(Messwert).where(Messwert.zaehlpunkt.in_(zps),
+                                      Messwert.beginn >= imp.von.strftime(energiedaten.ZEITFORMAT),
+                                      Messwert.beginn <= imp.bis.strftime(energiedaten.ZEITFORMAT)))
+        zeilen = [w for w in imp.werte if w["zaehlpunkt"] in zps]
+        if zeilen:
+            s.execute(Messwert.__table__.insert(), zeilen)
+        ergebnisse.append({"datei": datei.filename, "von": imp.von, "bis": imp.bis, "zaehlpunkte": len(zps),
+                           "werte": len(zeilen), "unbekannt": [maskiert(z) for z in imp.zaehlpunkte - bekannt]})
+    s.commit()
+    return _seite(request, "energiedaten.html", ergebnisse=ergebnisse, **_energiedaten_stand(s))
+
+
+def _energiedaten_stand(s: Session) -> dict:
+    stand = auswertung.abdeckung(s)
+    zeilen = []
+    for g in s.exec(select(Gruppe).where(Gruppe.status != GruppenStatus.BEENDET)).all():
+        d = _gruppen_daten(s, g)
+        for t in [d["erzeuger"]] + [a for _, a in d["abnehmer"]]:
+            zeilen.append((g, t))
+    letzter = max((m for werte in stand.values() for m in werte), default=f"{date.today():%Y-%m}")
+    monate = auswertung.monatsschluessel(date.fromisoformat(letzter + "-01"))
+    soll = {k: (energiedaten.monate(date.fromisoformat(k + "-01"), date.fromisoformat(k + "-01"))[0][1].day) * 96
+            for k in monate}
+    testdateien = sorted(p.name for p in config.TESTDATEN.glob("*.xlsx")) if config.TESTDATEN.exists() else []
+    return {"stand": stand, "zeilen": zeilen, "monate": monate, "soll": soll, "testdateien": testdateien}
+
+
+@app.get("/verwaltung/testdaten/{name}")
+def testdatei(name: str, _=Depends(verwaltung)):
+    erlaubt = {p.name: p for p in config.TESTDATEN.glob("*.xlsx")} if config.TESTDATEN.exists() else {}
+    if name not in erlaubt:
+        raise HTTPException(404)
+    return FileResponse(erlaubt[name], filename=name)
 
 
 @app.get("/verwaltung/gruppe/{gid}/infoblatt", response_class=HTMLResponse)
@@ -570,6 +830,20 @@ def mein_bereich(request: Request, tid: int, token: str, s: Session = Depends(si
         if t.rolle == Rolle.ABNEHMER:
             abfrage = abfrage.where(Rechnung.abnehmer_id == t.id)
         daten["rechnungen"] = s.exec(abfrage.order_by(Rechnung.bis.desc())).all()
+        if t.rolle == Rolle.ERZEUGER:
+            daten["a"] = _auswertung(s, t, [a for _, a in d["abnehmer"]])
+        else:
+            daten["a"] = _auswertung(s, None, [t])
+        offen = [r for r in daten["rechnungen"] if not r.bezahlt_am]
+        if t.rolle == Rolle.ABNEHMER and offen:
+            daten["aufgaben"].append((f"{len(offen)} offene Rechnung(en) bezahlen, siehe unten", None))
+        jahre: dict[int, dict] = {}
+        for r in daten["rechnungen"]:
+            j = jahre.setdefault(r.bis.year, {"kwh": 0.0, "brutto": 0.0, "bezahlt": 0.0})
+            j["kwh"] += r.kwh
+            j["brutto"] += r.brutto
+            j["bezahlt"] += r.brutto if r.bezahlt_am else 0.0
+        daten["jahre"] = sorted(jahre.items(), reverse=True)
     return _seite(request, "mein.html", **daten)
 
 

@@ -21,6 +21,10 @@ FIX PV handelt als bevollmächtigter Dienstleister, nicht als Organisator.
 | Zahlung: IBAN des Erzeugers, QR-Code (EPC/GiroCode) auf jeder Rechnung | fertig (Stufe 2) |
 | Informationsblatt und Preisänderung mit 1 Monat Vorlauf (§ 69 ElWG) | fertig (Stufe 2), Texte juristisch prüfen |
 | Kennzahlen in der Übersicht | fertig (Stufe 2) |
+| Energiedaten: Import des EDA-Monatsexports (Excel), Viertelstundenwerte, Übersicht was fehlt | fertig, Aufbau an ersten echten Export anpassen |
+| Abrechnung auf Knopfdruck aus den Energiedaten (Monat/Jahr), Zahlungsstatus, Zahlungserinnerung | fertig |
+| Diagramme je Monat und Tagesverlauf in Verwaltung und Kundenbereich | fertig |
+| Testbetrieb: erfundene Kunden, fiktives Jahr 10/2025–09/2026 als EDA-Exporte (`python demo_daten.py --neu`) | fertig |
 | Automatische EDA-Anbindung (E-Mail/KEP) | braucht Marktpartner-ID und EDA-Zugang |
 | Automatischer Mailversand (SMTP), SEPA-Lastschrift | später, nach Freigabe |
 

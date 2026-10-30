@@ -23,6 +23,9 @@ ERINNERUNG_NACH_TAGEN = (2, 5)  # nach Freigabe, danach kurz vor Fristende
 
 ZAHLUNGSZIEL_TAGE = 14
 
+# Ordner mit den fiktiven EDA-Exporten zum Testen (legt demo_daten.py an)
+TESTDATEN = Path(os.environ.get("NACHBARSTROM_TESTDATEN", "testdaten"))
+
 # Schlüssel für die persönlichen Links (Unterschrift, Kundenbereich). Wird beim ersten
 # Start zufällig erzeugt und in einer Datei aufgehoben, damit verschickte Links
 # auch nach einem Neustart gültig bleiben.

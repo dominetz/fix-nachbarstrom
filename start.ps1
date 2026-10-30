@@ -21,8 +21,14 @@ if (-not (Test-Path ".venv")) {
 & .\.venv\Scripts\python.exe -m pip install --quiet -r requirements.txt
 
 if (-not (Test-Path "nachbarstrom.db")) {
-    $demo = Read-Host "Erfundene Beispieldaten zum Ausprobieren anlegen? (j/n)"
+    $demo = Read-Host "Testbetrieb mit erfundenen Kunden und einem fiktiven Jahr anlegen? (j/n)"
     if ($demo -eq "j") { & .\.venv\Scripts\python.exe demo_daten.py }
+} else {
+    $demo = Read-Host "Testbetrieb neu laden? Achtung: loescht ALLE Daten in der Plattform (j/n)"
+    if ($demo -eq "j") {
+        Write-Host "Lege Testbetrieb an, das dauert etwa eine Minute ..."
+        & .\.venv\Scripts\python.exe demo_daten.py --neu
+    }
 }
 
 $sicher = Read-Host "Passwort fuer die Verwaltung festlegen (Benutzer: admin)" -AsSecureString

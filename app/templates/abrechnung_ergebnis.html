@@ -1,7 +1,14 @@
 {% extends "verwaltung_basis.html" %}
+{% import "_status.html" as status %}
 {% block inhalt %}
 <h1>Abrechnung Gruppe {{ g.id }}</h1>
-<p>{{ neu }} Rechnung(en) erstellt.</p>
-{% if uebersprungen %}<div class="hinweis">Übersprungen: {{ uebersprungen|join(", ") }}</div>{% endif %}
-<p><a class="knopf" href="/verwaltung/gruppe/{{ g.id }}">Zurück zur Gruppe</a></p>
+{% if fehler %}<div class="fehler">{{ fehler }}</div>
+<p><a class="knopf" href="/verwaltung/energiedaten">Zu den Energiedaten</a> <a class="knopf zweit" href="/verwaltung/gruppe/{{ g.id }}#abrechnung">Zurück zur Gruppe</a></p>
+{% else %}
+<div class="hinweis">{{ neu }} Rechnung(en) erstellt. Die Mails dazu liegen im <a href="/verwaltung/postausgang">Postausgang</a>.</div>
+{% if rechnungen %}<div class="karte"><table><tr><th>Nummer</th><th>Abnehmer</th><th>Zeitraum</th><th class="zahl">kWh</th><th class="zahl">Brutto</th><th>Status</th></tr>
+{% for r in rechnungen %}<tr><td><a href="/verwaltung/rechnung/{{ r.id }}">{{ r.nummer }}</a></td><td>{{ namen[r.abnehmer_id] }}</td><td>{{ r.von.strftime("%d.%m.%Y") }} – {{ r.bis.strftime("%d.%m.%Y") }}</td><td class="zahl">{{ r.kwh|zahl(1) }}</td><td class="zahl">{{ r.brutto|zahl(2) }} €</td><td>{{ status.rechnung(r) }}</td></tr>{% endfor %}</table></div>{% endif %}
+{% if uebersprungen %}<div class="warnung">Übersprungen: {{ uebersprungen|join(", ") }}</div>{% endif %}
+<p><a class="knopf" href="/verwaltung/gruppe/{{ g.id }}#abrechnung">Zurück zur Gruppe</a></p>
+{% endif %}
 {% endblock %}

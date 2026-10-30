@@ -1,7 +1,8 @@
 {% extends "verwaltung_basis.html" %}
 {% block inhalt %}
 <h1>Teilnehmer</h1>
-<table><tr><th>Name</th><th>Rolle</th><th>Ort</th><th>Zählpunkt</th><th>Netzbetr.</th><th>Trafo / UW</th><th>kWp / kWh</th><th>Gruppe</th></tr>
-{% for t in liste %}<tr><td>{{ t.name }}<br><span class="klein">{{ t.email }}</span></td><td>{{ t.rolle.value }}</td><td>{{ t.plz }} {{ t.ort }}</td><td><code>{{ t.zaehlpunkt }}</code></td><td>{{ t.netzbetreiber }}</td><td>{{ t.trafo_id or "–" }} / {{ t.umspannwerk_id or "–" }}</td><td>{% if t.rolle.value == "erzeuger" %}{{ t.anlage_kwp|zahl(1) }} kWp{% else %}{{ t.jahresverbrauch_kwh|zahl }} kWh{% endif %}</td><td>{{ "ja" if t.id in in_gruppe else "frei" }}</td></tr>{% endfor %}
-</table>
+<p class="unter">{{ liste|length }} angemeldet. Ein Klick auf den Namen öffnet den Kundenbereich.</p>
+<div class="karte tabelle"><table><tr><th>Name</th><th>Rolle</th><th>Ort</th><th>Zählpunkt</th><th>Trafo / UW</th><th class="zahl">kWp / kWh</th><th>Gruppe</th></tr>
+{% for t in liste %}<tr><td><a href="{{ bereiche[t.id] }}">{{ t.name }}</a><br><span class="klein">{{ t.email }}</span></td><td>{{ "Erzeuger" if t.rolle.value == "erzeuger" else "Abnehmer" }}<br><span class="klein">{{ t.profiltyp.value }}</span></td><td>{{ t.plz }} {{ t.ort }}</td><td><code>{{ maskiert(t.zaehlpunkt) }}</code><br><span class="klein">NB {{ t.netzbetreiber }}</span></td><td>{{ t.trafo_id or "–" }} / {{ t.umspannwerk_id or "–" }}</td><td class="zahl">{% if t.rolle.value == "erzeuger" %}{{ t.anlage_kwp|zahl(1) }} kWp{% else %}{{ t.jahresverbrauch_kwh|zahl }} kWh{% endif %}</td><td>{% if t.id in in_gruppe %}<span class="badge ok">in Gruppe</span>{% else %}<span class="badge neutral">frei</span>{% endif %}</td></tr>{% endfor %}
+</table></div>
 {% endblock %}

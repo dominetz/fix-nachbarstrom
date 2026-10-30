@@ -1,0 +1,2 @@
+{% macro gruppe(st) %}{% set farbe = {"aktiv": "ok", "beendet": "neutral", "vorschlag": "neutral", "vertrag_offen": "warn", "eda_angemeldet": "blau", "registriert": "blau", "unterschrieben": "blau"}[st.value] %}<span class="badge {{ farbe }}">{{ status_text[st] }}</span>{% endmacro %}
+{% macro rechnung(r) %}{% set st = rechnung_status(r) %}<span class="badge {{ {'bezahlt': 'ok', 'offen': 'warn', 'überfällig': 'rot'}[st] }}">{{ st }}{% if st == 'bezahlt' %} {{ r.bezahlt_am.strftime('%d.%m.') }}{% endif %}</span>{% endmacro %}
