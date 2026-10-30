@@ -1,0 +1,7 @@
+{% extends "verwaltung_basis.html" %}
+{% block inhalt %}
+<h1>Abrechnung Gruppe {{ g.id }}</h1>
+<p>{{ neu }} Rechnung(en) erstellt.</p>
+{% if uebersprungen %}<div class="hinweis">Übersprungen: {{ uebersprungen|join(", ") }}</div>{% endif %}
+<p><a class="knopf" href="/verwaltung/gruppe/{{ g.id }}">Zurück zur Gruppe</a></p>
+{% endblock %}

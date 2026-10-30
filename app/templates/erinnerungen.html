@@ -1,0 +1,10 @@
+{% extends "verwaltung_basis.html" %}
+{% block inhalt %}
+<h1>Erinnerungen heute</h1>
+<p class="klein">Mailversand ist noch nicht eingerichtet. Text kopieren, senden, dann „erledigt“ klicken.</p>
+{% for e in liste %}
+<div class="karte"><b>{{ e.teilnehmer.name }}</b> · {{ e.teilnehmer.email }}{% if e.teilnehmer.telefon %} · {{ e.teilnehmer.telefon }}{% endif %} · Frist {{ e.frist.strftime("%d.%m.%Y") }}
+<p><b>{{ e.betreff }}</b></p><pre style="white-space:pre-wrap">{{ e.text }}</pre>
+<form method="post" action="/verwaltung/erinnerungen/{{ e.zustimmung.id }}/erledigt"><button class="zweit">Erledigt</button></form></div>
+{% else %}<p>Heute ist nichts fällig.</p>{% endfor %}
+{% endblock %}

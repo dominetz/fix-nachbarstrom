@@ -1,0 +1,17 @@
+{% extends "verwaltung_basis.html" %}
+{% block inhalt %}
+<p class="klein nicht-drucken">Zum Speichern als PDF: Drucken → „Als PDF speichern“.</p>
+<p>{{ erzeuger.name }}<br>{{ erzeuger.strasse }}<br>{{ erzeuger.plz }} {{ erzeuger.ort }}</p>
+<p>An: {{ abnehmer.name }}<br>{{ abnehmer.strasse }}<br>{{ abnehmer.plz }} {{ abnehmer.ort }}</p>
+<h1>Rechnung {{ r.nummer }}</h1>
+<p>Rechnungsdatum: {{ r.datum.strftime("%d.%m.%Y") }} · Leistungszeitraum: {{ r.von.strftime("%d.%m.%Y") }} bis {{ r.bis.strftime("%d.%m.%Y") }}</p>
+<p>Peer-to-Peer-Vertrag (Gruppe {{ g.id }}{% if g.gemeinschafts_id %}, Gemeinschafts-ID {{ g.gemeinschafts_id }}{% endif %})<br>
+Zählpunkt Erzeuger: <code>{{ erzeuger.zaehlpunkt }}</code><br>Zählpunkt Abnehmer: <code>{{ abnehmer.zaehlpunkt }}</code></p>
+<table><tr><th>Leistung</th><th>Menge</th><th>Preis</th><th>Betrag</th></tr>
+<tr><td>Gemeinsam genutzter Strom aus erneuerbarer Erzeugung (PV)</td><td>{{ r.kwh|zahl(1) }} kWh</td><td>{{ r.preis_ct_kwh|zahl(2) }} ct/kWh</td><td>{{ r.netto|zahl(2) }} €</td></tr>
+<tr><td colspan="3">Umsatzsteuer {{ (r.ust_satz*100)|zahl }} %</td><td>{{ r.ust|zahl(2) }} €</td></tr>
+<tr><th colspan="3">Gesamtbetrag</th><th>{{ r.brutto|zahl(2) }} €</th></tr></table>
+{% if not r.ust_satz %}<p class="klein">Umsatzsteuerfrei aufgrund der Kleinunternehmerregelung (§ 6 Abs 1 Z 27 UStG). [Mit Steuerberater bestätigen]</p>{% endif %}
+<p>Fällig bis {{ r.faellig.strftime("%d.%m.%Y") }}. Die Netzentgelte stellt Ihnen weiterhin der Netzbetreiber in Rechnung, den restlichen Strom Ihr Lieferant.</p>
+<p class="klein">Erstellt im Namen des Erzeugers durch {{ dienstleister.firma }} ({{ dienstleister.email }}). Bei Streitigkeiten können Sie sich an die Schlichtungsstelle der E-Control wenden.</p>
+{% endblock %}

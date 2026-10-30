@@ -1,0 +1,43 @@
+{% extends "verwaltung_basis.html" %}
+{% block inhalt %}
+<h1>Gruppe {{ g.id }}: {{ erzeuger.name }}</h1>
+<p>Status: <b>{{ status_text[g.status] }}</b> · Zone {{ g.zonelevel }} · erwartet {{ g.erwartete_kwh_jahr|zahl }} kWh/Jahr</p>
+<p class="nicht-drucken"><a class="knopf zweit" href="/verwaltung/gruppe/{{ g.id }}/vertrag">Vertrag</a> <a class="knopf zweit" href="/verwaltung/gruppe/{{ g.id }}/vollmacht">Vollmacht</a> <a class="knopf zweit" href="/verwaltung/gruppe/{{ g.id }}/anmeldung">Daten für ebUtilities und EDA</a></p>
+
+<h2>Teilnehmer, Unterschrift und Zustimmung im Netzportal</h2>
+<table><tr><th>Name</th><th>Unterschrift</th><th>Link zum Unterschreiben</th><th>Netzportal</th></tr>
+{% for t in alle %}{% set z = zustimmungen.get(t.id) %}<tr>
+<td>{{ t.name }}<br><span class="klein">{{ t.rolle.value }}</span></td>
+<td>{{ "✓" if t.id in unterschriften else "offen" }}</td>
+<td><code class="klein">{{ links[t.id] }}</code></td>
+<td><form method="post" action="/verwaltung/gruppe/{{ g.id }}/zustimmung"><input type="hidden" name="teilnehmer_id" value="{{ t.id }}">
+<span class="klein">Freigabe NB</span><input type="date" name="freigegeben_am" value="{{ z.freigegeben_am if z and z.freigegeben_am else '' }}">
+<span class="klein">Zugestimmt</span><input type="date" name="erteilt_am" value="{{ z.erteilt_am if z and z.erteilt_am else '' }}">
+<button class="zweit">Speichern</button></form></td></tr>{% endfor %}
+</table>
+
+<h2>Einstellungen</h2>
+<form method="post" action="/verwaltung/gruppe/{{ g.id }}">
+<div class="raster">
+<div><label>Status</label><select name="status">{% for s in stati %}<option value="{{ s.value }}" {{ "selected" if s == g.status }}>{{ status_text[s] }}</option>{% endfor %}</select></div>
+<div><label>Preis ct/kWh netto (0 = Schenkung)</label><input type="number" step="0.01" name="preis_ct_kwh" value="{{ g.preis_ct_kwh }}"></div>
+<div><label>USt-Satz Erzeuger</label><select name="ust_satz"><option value="0" {{ "selected" if not g.ust_satz }}>0 % (Kleinunternehmer)</option><option value="0.2" {{ "selected" if g.ust_satz }}>20 %</option></select></div>
+<div><label><input type="checkbox" name="rechnung_monatlich" value="true" {{ "checked" if g.rechnung_monatlich }}> Monatliche Rechnung</label></div>
+</div>
+<div class="raster">
+<div><label>Marktpartner-ID (PP…)</label><input name="marktpartner_id" value="{{ g.marktpartner_id or '' }}"></div>
+<div><label>Gemeinschafts-ID (AT…)</label><input name="gemeinschafts_id" value="{{ g.gemeinschafts_id or '' }}"></div>
+</div>
+<label>Notiz</label><textarea name="notiz" rows="2">{{ g.notiz or '' }}</textarea>
+<p><button>Speichern</button></p>
+</form>
+
+<h2>Abrechnung</h2>
+<form method="post" action="/verwaltung/gruppe/{{ g.id }}/abrechnung" enctype="multipart/form-data">
+<p class="klein">CSV aus dem EDA-Energiedatenreport mit den Spalten <code>zaehlpunkt;von;bis;kwh</code> (geteilte kWh je Abnehmer).</p>
+<input type="file" name="report" accept=".csv" required> <button>Rechnungen erstellen</button>
+</form>
+<table><tr><th>Nummer</th><th>Abnehmer</th><th>Zeitraum</th><th>kWh</th><th>Brutto</th></tr>
+{% for r in rechnungen %}<tr><td><a href="/verwaltung/rechnung/{{ r.id }}">{{ r.nummer }}</a></td><td>{{ r.abnehmer_id }}</td><td>{{ r.von.strftime("%d.%m.%Y") }} – {{ r.bis.strftime("%d.%m.%Y") }}</td><td>{{ r.kwh|zahl(1) }}</td><td>{{ r.brutto|zahl(2) }} €</td></tr>
+{% else %}<tr><td colspan="5">Noch keine Rechnungen.</td></tr>{% endfor %}</table>
+{% endblock %}

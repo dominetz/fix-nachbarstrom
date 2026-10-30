@@ -1,0 +1,23 @@
+{% extends "verwaltung_basis.html" %}
+{% block inhalt %}
+<h1>Anmeldedaten Gruppe {{ g.id }}</h1>
+<div class="hinweis">Diese Seite enthält alles, was auf ebUtilities.at und im EDA-Portal eingetragen wird. Die Anmeldung machst du mit der Vollmacht im Namen des Erzeugers.</div>
+<h2>1. ebUtilities.at: Modell registrieren</h2>
+<table>
+<tr><th>Feld</th><th>Eintrag</th></tr>
+<tr><td>Rolle</td><td>Peer-to-Peer (P2P, PP)</td></tr>
+<tr><td>Name</td><td>{{ erzeuger.name }}</td></tr>
+<tr><td>Adresse</td><td>{{ erzeuger.strasse }}, {{ erzeuger.plz }} {{ erzeuger.ort }}</td></tr>
+<tr><td>E-Mail für das EDA-Portal</td><td>[eigene Adresse je Gruppe, z. B. gruppe{{ g.id }}@…]</td></tr>
+<tr><td>Zonelevel</td><td>{{ g.zonelevel }}</td></tr>
+<tr><td>Anbindungsart</td><td>EDA-Portal (kostenlos bis 50 Zählpunkte)</td></tr>
+<tr><td>Nachweise</td><td>Ausweis des Zeichnungsberechtigten + unterschriebene Vollmacht</td></tr>
+</table>
+<p>Danach Marktpartner-ID (PP…) und Gemeinschafts-ID (AT…) in der Gruppe eintragen und Status auf „registriert“ setzen.</p>
+<h2>2. EDA-Portal: Zählpunkte anlegen</h2>
+<table><tr><th>Teilnehmer</th><th>Rolle</th><th>Zählpunkt</th></tr>
+<tr><td>{{ erzeuger.name }}</td><td>Erzeuger (Einspeisung)</td><td><code>{{ erzeuger.zaehlpunkt }}</code></td></tr>
+{% for m, a in abnehmer %}<tr><td>{{ a.name }}</td><td>Abnehmer</td><td><code>{{ a.zaehlpunkt }}</code></td></tr>{% endfor %}
+</table>
+<p>Danach Status auf „Zählpunkte angemeldet“ setzen. Sobald der Netzbetreiber freigibt (Prozessmonitor im EDA-Portal), das Datum „Freigabe NB“ je Teilnehmer eintragen. Ab dann erinnert die Plattform.</p>
+{% endblock %}

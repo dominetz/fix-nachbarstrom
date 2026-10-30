@@ -1,0 +1,7 @@
+{% extends "verwaltung_basis.html" %}
+{% block inhalt %}
+<h1>Teilnehmer</h1>
+<table><tr><th>Name</th><th>Rolle</th><th>Ort</th><th>Zählpunkt</th><th>Netzbetr.</th><th>Trafo / UW</th><th>kWp / kWh</th><th>Gruppe</th></tr>
+{% for t in liste %}<tr><td>{{ t.name }}<br><span class="klein">{{ t.email }}</span></td><td>{{ t.rolle.value }}</td><td>{{ t.plz }} {{ t.ort }}</td><td><code>{{ t.zaehlpunkt }}</code></td><td>{{ t.netzbetreiber }}</td><td>{{ t.trafo_id or "–" }} / {{ t.umspannwerk_id or "–" }}</td><td>{% if t.rolle.value == "erzeuger" %}{{ t.anlage_kwp|zahl(1) }} kWp{% else %}{{ t.jahresverbrauch_kwh|zahl }} kWh{% endif %}</td><td>{{ "ja" if t.id in in_gruppe else "frei" }}</td></tr>{% endfor %}
+</table>
+{% endblock %}

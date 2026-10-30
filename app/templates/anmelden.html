@@ -1,0 +1,50 @@
+{% extends "basis.html" %}
+{% block inhalt %}
+<h1>{% if rolle.value == "erzeuger" %}Als Erzeuger anmelden{% else %}Als Abnehmer anmelden{% endif %}</h1>
+{% if erzeuger %}<div class="hinweis">Sie wurden von {{ erzeuger.vorname }} eingeladen. Nach der Anmeldung prüfen wir, ob Sie Strom teilen können.</div>{% endif %}
+{% if fehler %}<div class="fehler">{% for f in fehler %}<div>{{ f }}</div>{% endfor %}</div>{% endif %}
+<form method="post" action="/anmelden">
+<input type="hidden" name="rolle" value="{{ rolle.value }}"><input type="hidden" name="einladung" value="{{ einladung or '' }}">
+<div class="raster">
+<div><label>Vorname</label><input name="vorname" required value="{{ werte.vorname }}"></div>
+<div><label>Nachname</label><input name="nachname" required value="{{ werte.nachname }}"></div>
+<div><label>Firma (optional)</label><input name="firma" value="{{ werte.firma }}"></div>
+</div>
+<div class="raster">
+<div><label>Straße, Nr.</label><input name="strasse" required value="{{ werte.strasse }}"></div>
+<div><label>PLZ</label><input name="plz" required value="{{ werte.plz }}"></div>
+<div><label>Ort</label><input name="ort" required value="{{ werte.ort }}"></div>
+</div>
+<div class="raster">
+<div><label>E-Mail</label><input type="email" name="email" required value="{{ werte.email }}"></div>
+<div><label>Telefon (für Erinnerungen per SMS)</label><input name="telefon" value="{{ werte.telefon }}"></div>
+</div>
+<label>Zählpunktnummer {% if rolle.value == "erzeuger" %}der Einspeisung{% endif %}</label>
+<input name="zaehlpunkt" required placeholder="AT00…" value="{{ werte.zaehlpunkt }}">
+<p class="klein">33 Stellen, beginnt mit AT. Steht auf Ihrer Netzrechnung oder im Kundenportal des Netzbetreibers.</p>
+<div class="raster">
+<div><label>Nahebereichs-ID Trafostation (optional)</label><input name="trafo_id" value="{{ werte.trafo_id }}"></div>
+<div><label>Nahebereichs-ID Umspannwerk (optional)</label><input name="umspannwerk_id" value="{{ werte.umspannwerk_id }}"></div>
+</div>
+<p class="klein">Finden Sie im Kundenportal des Netzbetreibers. Wenn Sie sie nicht haben, fragen wir für Sie nach.</p>
+{% if rolle.value == "erzeuger" %}
+<div class="raster">
+<div><label>Größe der PV-Anlage (kWp)</label><input type="number" step="0.1" name="anlage_kwp" required value="{{ werte.anlage_kwp }}"></div>
+<div><label>Eigener Jahresverbrauch (kWh)</label><input type="number" name="jahresverbrauch_kwh" value="{{ werte.jahresverbrauch_kwh or 0 }}"></div>
+</div>
+{% else %}
+<input type="hidden" name="anlage_kwp" value="0">
+<label>Jahresverbrauch (kWh)</label><input type="number" name="jahresverbrauch_kwh" required value="{{ werte.jahresverbrauch_kwh }}">
+{% endif %}
+<label>Wie wird bei Ihnen meistens Strom verbraucht?</label>
+<select name="profiltyp">
+<option value="haushalt">Haushalt, tagsüber meist niemand zu Hause</option>
+<option value="haushalt_tagsueber">Haushalt, tagsüber jemand zu Hause</option>
+<option value="waermepumpe">Haushalt mit Wärmepumpe</option>
+<option value="eauto">Haushalt mit E-Auto, lädt tagsüber zu Hause</option>
+<option value="gewerbe">Betrieb, Büro oder Praxis (Mo–Fr)</option>
+</select>
+<label><input type="checkbox" name="einwilligung" value="true"> Ich willige ein, dass {{ dienstleister.firma }} meine Angaben und Viertelstundenwerte nutzt, um passende Partner zu finden. Partner sehen vor Vertragsabschluss nur Ortsteil und erwartete Menge, nicht meinen Namen. Ich kann die Einwilligung jederzeit widerrufen.</label>
+<p><button>Anmelden</button></p>
+</form>
+{% endblock %}

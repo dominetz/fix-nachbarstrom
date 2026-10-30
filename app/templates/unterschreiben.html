@@ -1,0 +1,17 @@
+{% extends "basis.html" %}
+{% block inhalt %}
+<h1>Vertrag und Vollmacht unterschreiben</h1>
+<p>Hallo {{ t.vorname }}, bitte lesen Sie den Vertrag und die Vollmacht. Mit Ihrer Unterschrift beauftragen Sie {{ dienstleister.firma }}, die Anmeldung beim Netzbetreiber und die Abrechnung für Sie zu erledigen.</p>
+{% include "_vertrag_inhalt.html" %}
+<hr>
+{% include "_vollmacht_inhalt.html" %}
+{% if erledigt %}
+<div class="hinweis">Unterschrieben am {{ erledigt[0].zeit.strftime("%d.%m.%Y um %H:%M") }}. Danke! Als Nächstes bekommen Sie eine Mail von Vorarlberg Netz und bestätigen dort einmal im Kundenportal.</div>
+{% else %}
+<form method="post" class="nicht-drucken">
+<label><input type="checkbox" name="gelesen" value="true" required> Ich habe Vertrag und Vollmacht gelesen und bin einverstanden.</label>
+<label>Zur Unterschrift bitte Vor- und Nachnamen eintippen</label><input name="name_getippt" required>
+<p><button>Jetzt unterschreiben</button></p>
+</form>
+{% endif %}
+{% endblock %}

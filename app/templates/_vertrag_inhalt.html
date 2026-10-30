@@ -1,0 +1,20 @@
+<h2>Peer-to-Peer-Vertrag über die gemeinsame Nutzung von erneuerbarem Strom (§ 68 ElWG)</h2>
+<p class="klein">Entwurf, Gruppe Nr. {{ g.id }}. Vor dem ersten echten Einsatz juristisch prüfen lassen.</p>
+<p><b>§ 1 Parteien</b><br>
+Erzeuger: {{ erzeuger.name }}, {{ erzeuger.strasse }}, {{ erzeuger.plz }} {{ erzeuger.ort }}, {{ erzeuger.email }}<br>
+{% for m, a in abnehmer %}Abnehmer {{ loop.index }}: {{ a.name }}, {{ a.strasse }}, {{ a.plz }} {{ a.ort }}, {{ a.email }}<br>{% endfor %}
+Dienstleister (bevollmächtigt durch die Parteien): {{ dienstleister.firma }}, {{ dienstleister.adresse }}, {{ dienstleister.fn }}</p>
+<p><b>§ 2 Gegenstand</b><br>Der Erzeuger {% if g.preis_ct_kwh > 0 %}verkauft{% else %}schenkt{% endif %} den Abnehmern Strom aus seiner PV-Anlage ({{ erzeuger.anlage_kwp|zahl(1) }} kWp), soweit Erzeugung und Verbrauch in derselben Viertelstunde zusammenfallen. Bestehende Liefer- und Einspeiseverträge bleiben aufrecht. Den restlichen Strom liefert weiter der jeweilige Lieferant.</p>
+<p><b>§ 3 Zählpunkte und Nahebereich</b><br>
+Erzeuger (Einspeisung): <code>{{ erzeuger.zaehlpunkt }}</code><br>
+{% for m, a in abnehmer %}Abnehmer {{ loop.index }}: <code>{{ a.zaehlpunkt }}</code><br>{% endfor %}
+Zonelevel: {{ {3: "3 (Lokalbereich, gleiche Trafostation)", 4: "4 (Regionalbereich, gleiches Umspannwerk)", 6: "6 (ohne Netzrabatt)"}[g.zonelevel] }}</p>
+<p><b>§ 4 Aufteilung</b><br>Dynamisch je Viertelstunde nach dem tatsächlichen Verbrauch der Abnehmer. Teilnahmefaktor des Erzeugers: 100 %. Es gibt keine Mindestliefer- und keine Mindestabnahmemenge.</p>
+<p><b>§ 5 Preis</b><br>{% if g.preis_ct_kwh > 0 %}{{ g.preis_ct_kwh|zahl(2) }} ct/kWh netto{% if g.ust_satz %} zuzüglich {{ (g.ust_satz*100)|zahl }} % USt{% endif %}.{% else %}Unentgeltlich (Schenkung).{% endif %} Preisänderungen werden mindestens einen Monat vorher schriftlich mit Begründung und Hinweis auf das Widerspruchsrecht mitgeteilt.</p>
+<p><b>§ 6 Abrechnung</b><br>Grundlage sind die Messdaten des Netzbetreibers über EDA. Die Rechnung stellt {{ dienstleister.firma }} im Namen des Erzeugers, {% if g.rechnung_monatlich %}monatlich{% else %}jährlich{% endif %} und kostenlos. Jeder Abnehmer kann eine monatliche Rechnung verlangen. Zahlung innerhalb von 14 Tagen nach Rechnungserhalt.</p>
+<p><b>§ 7 Dienstleister</b><br>{{ dienstleister.firma }} übernimmt aufgrund der Vollmacht Registrierung, Anmeldung und Abmeldung der Zählpunkte, Prüfung der Messdaten und die Abrechnung im Namen des Erzeugers. Das Entgelt dafür wird gesondert vereinbart.</p>
+<p><b>§ 8 Laufzeit und Kündigung</b><br>Unbefristet. Jede Partei kann mit einer Frist von zwei Wochen kündigen. Der Vertrag endet für eine Partei automatisch, wenn sie die Teilnahmevoraussetzungen verliert (z. B. Umzug, Zählertausch ohne Viertelstundenwerte).</p>
+<p><b>§ 9 Mitteilungspflichten</b><br>Änderungen an Kontaktdaten, Anlage oder Zähler sind unverzüglich mitzuteilen.</p>
+<p><b>§ 10 Haftung</b><br>Die Parteien haften einander nicht für Mess- oder Zuteilungsfehler des Netzbetreibers. Im Übrigen ist die Haftung auf Vorsatz und grobe Fahrlässigkeit beschränkt.</p>
+<p><b>§ 11 Datenschutz</b><br>Jede Partei sieht nur ihre eigenen Energiewerte. Details regelt die Datenschutzinformation von {{ dienstleister.firma }}.</p>
+<p><b>§ 12 Beschwerden, Recht</b><br>Bei Streitigkeiten kann die Schlichtungsstelle der E-Control angerufen werden. Es gilt österreichisches Recht.</p>

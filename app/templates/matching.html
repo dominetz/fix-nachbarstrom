@@ -1,0 +1,15 @@
+{% extends "verwaltung_basis.html" %}
+{% block inhalt %}
+<h1>Matching</h1>
+<p class="klein">Vorschläge für alle freien Erzeuger. Gerechnet mit Standardprofilen je Viertelstunde (Sommer, Übergang, Winter). Eingeladene Wunschpartner werden zuerst berücksichtigt.</p>
+{% for v in vorschlaege %}
+<div class="karte">
+<b>{{ v.erzeuger.name }}</b>, {{ v.erzeuger.ort }}, {{ v.erzeuger.anlage_kwp|zahl(1) }} kWp. Zone {{ v.zonelevel }}.
+Geteilt ca. <b>{{ v.kwh_gesamt|zahl }} kWh/Jahr</b> ({{ (v.auslastung*100)|zahl }} % des Überschusses).
+<table><tr><th>Abnehmer</th><th>Ort</th><th>Profil</th><th>kWh/Jahr geteilt</th></tr>
+{% for a in v.abnehmer %}<tr><td>{{ a.name }}</td><td>{{ a.ort }}</td><td>{{ a.profiltyp.value }}</td><td>{{ v.kwh_je_abnehmer[a.id]|zahl }}</td></tr>{% endfor %}</table>
+<form method="post" action="/verwaltung/gruppe"><input type="hidden" name="erzeuger_id" value="{{ v.erzeuger.id }}"><input type="hidden" name="abnehmer_ids" value="{{ v.abnehmer|map(attribute='id')|join(',') }}"><button>Gruppe anlegen</button></form>
+</div>
+{% else %}<p>Keine Vorschläge.</p>{% endfor %}
+{% if ohne %}<h2>Ohne passenden Partner (Warteliste)</h2><ul>{% for e in ohne %}<li>{{ e.name }}, {{ e.ort }}</li>{% endfor %}</ul>{% endif %}
+{% endblock %}
