@@ -65,6 +65,7 @@ class Teilnehmer(SQLModel, table=True):
     profiltyp: Profiltyp = Profiltyp.HAUSHALT
     jahresverbrauch_kwh: float = 0  # Abnehmer, beim Erzeuger der Eigenverbrauch
     anlage_kwp: float = 0  # nur Erzeuger
+    iban: Optional[str] = None  # nur Erzeuger: Konto für die Zahlungen der Abnehmer
     einladung_von: Optional[int] = Field(default=None, foreign_key="teilnehmer.id")
     einwilligung_daten: bool = False
     einwilligung_zeit: Optional[datetime] = None
@@ -90,8 +91,11 @@ class Gruppe(SQLModel, table=True):
     status: GruppenStatus = GruppenStatus.VORSCHLAG
     zonelevel: int = 6  # 3 lokal (Trafo), 4 regional (Umspannwerk), 6 ohne Rabatt
     preis_ct_kwh: float = 0.0  # netto; 0 = Schenkung
+    preis_neu_ct_kwh: Optional[float] = None  # angekündigte Preisänderung
+    preis_neu_ab: Optional[date] = None  # frühestens ein Monat nach Ankündigung (§ 69 ElWG)
     ust_satz: float = 0.0  # 0.0 Kleinunternehmer, 0.20 sonst; mit Steuerberater klären
     rechnung_monatlich: bool = False  # sonst jährlich
+    aktiv_seit: Optional[date] = None  # erster Tag mit geteilten Daten
     erwartete_kwh_jahr: float = 0.0
     marktpartner_id: Optional[str] = None  # PP…, nach ebUtilities-Registrierung
     gemeinschafts_id: Optional[str] = None  # AT… 33-stellig
@@ -144,3 +148,33 @@ class Rechnung(SQLModel, table=True):
     brutto: float
     datum: date = Field(default_factory=date.today)
     faellig: date
+    bezahlt_am: Optional[date] = None
+    gemahnt_am: Optional[date] = None
+
+
+class Nachricht(SQLModel, table=True):
+    """Mail-Entwurf im Postausgang. Gesendet wird nur von Hand."""
+    id: Optional[int] = Field(default=None, primary_key=True)
+    teilnehmer_id: int = Field(foreign_key="teilnehmer.id")
+    gruppe_id: Optional[int] = Field(default=None, foreign_key="gruppe.id")
+    art: str  # willkommen, unterschrift, rechnung, preisaenderung, kuendigung
+    betreff: str
+    text: str
+    erstellt: datetime = Field(default_factory=jetzt)
+    gesendet_am: Optional[datetime] = None
+
+
+class Messwert(SQLModel, table=True):
+    """Viertelstundenwert eines Zählpunkts aus dem EDA-Export (kWh).
+
+    beginn ist der Beginn der Viertelstunde als Text "JJJJ-MM-TT HH:MM" (Ortszeit),
+    damit nach Monat und Tag einfach summiert werden kann.
+    """
+    id: Optional[int] = Field(default=None, primary_key=True)
+    zaehlpunkt: str = Field(index=True)
+    beginn: str = Field(index=True)
+    verbrauch: float = 0.0  # Gesamtverbrauch lt. Messung
+    anteil: float = 0.0  # zugeteilter Anteil an der gemeinsamen Erzeugung
+    eigendeckung: float = 0.0  # davon tatsächlich verbraucht (wird verrechnet)
+    erzeugung: float = 0.0  # Erzeuger: in die Gemeinschaft eingespeist
+    restueberschuss: float = 0.0  # Erzeuger: nicht geteilt, normal ins Netz

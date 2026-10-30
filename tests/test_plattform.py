@@ -193,3 +193,192 @@ def test_abnehmer_nur_einmal_vorgeschlagen(client):
     seite = c.get("/verwaltung/matching", auth=("admin", "test")).text
     assert seite.count('name="abnehmer_ids"') == 1
     assert "Warteliste" in seite
+
+
+def test_iban_und_qr():
+    from app import zahlung
+    assert zahlung.iban_gueltig("AT61 1904 3002 3457 3201")  # Beispiel-IBAN aus der Norm
+    assert not zahlung.iban_gueltig("AT61 1904 3002 3457 3202")
+    daten = zahlung.epc_daten("Anna Sonnig", "AT61 1904 3002 3457 3201", 12.5, "Rechnung NS-1")
+    assert daten.split("\n")[6:8] == ["AT611904300234573201", "EUR12.50"]
+    assert zahlung.qr_svg("A", "AT611904300234573201", 1, "x").startswith("<svg")
+
+
+def test_dienstleistung_kundenbereich_postausgang_preis(client):
+    c, engine = client
+    auth = ("admin", "test")
+    _anmelden(c, "erzeuger", 1, anlage_kwp=12, jahresverbrauch_kwh=3000, profiltyp="haushalt")
+    _anmelden(c, "abnehmer", 2)
+    post = c.get("/verwaltung/postausgang", auth=auth).text
+    assert post.count("Ihre Anmeldung ist da") == 2
+    bereich = re.search(r"http://localhost:8000(/mein/2/\w+)", post).group(1)
+    assert "Wir suchen gerade" in c.get(bereich).text
+    assert c.get("/mein/2/falsch").status_code == 404
+
+    r = c.post("/verwaltung/gruppe", data={"erzeuger_id": 1, "abnehmer_ids": "2"}, auth=auth, follow_redirects=False)
+    gid = int(r.headers["location"].rsplit("/", 1)[1])
+    seite = c.get(bereich).text
+    assert "Vertrag und Vollmacht unterschreiben" in seite and "Partner gefunden" in seite
+    assert c.get(f"{bereich}/infoblatt").status_code == 200
+    assert "Partner ist gefunden" in c.get("/verwaltung/postausgang", auth=auth).text
+
+    # Erzeuger hinterlegt IBAN im eigenen Bereich
+    erz = re.search(r"http://localhost:8000(/mein/1/\w+)", c.get("/verwaltung/postausgang", auth=auth).text).group(1)
+    c.post(f"{erz}/iban", data={"iban": "AT61 1904 3002 3457 3202"})
+    assert "stimmt nicht" in c.get(f"{erz}?iban_fehler=1").text
+    c.post(f"{erz}/iban", data={"iban": "AT61 1904 3002 3457 3201"})
+    assert "AT61 1904" in c.get(erz).text
+
+    c.post(f"/verwaltung/gruppe/{gid}", auth=auth, data={"status": "aktiv", "preis_ct_kwh": 10, "ust_satz": 0})
+    # Preis in aktiver Gruppe nur per Ankündigung
+    assert c.post(f"/verwaltung/gruppe/{gid}", auth=auth,
+                  data={"status": "aktiv", "preis_ct_kwh": 12, "ust_satz": 0}).status_code == 400
+    zu_frueh = (date.today() + timedelta(days=10)).isoformat()
+    assert c.post(f"/verwaltung/gruppe/{gid}/preisaenderung", auth=auth,
+                  data={"neuer_preis": 12, "ab": zu_frueh, "grund": "x"}).status_code == 400
+    ab = date.today() + timedelta(days=40)
+    c.post(f"/verwaltung/gruppe/{gid}/preisaenderung", auth=auth,
+           data={"neuer_preis": 12, "ab": ab.isoformat(), "grund": "Höhere Kosten"})
+    assert "Neuer Preis ab" in c.get("/verwaltung/postausgang", auth=auth).text
+
+    # Abrechnung vor und nach dem Stichtag
+    csv = (f"zaehlpunkt;von;bis;kwh\n{zp(2)};{date.today()};{date.today()};100\n"
+           f"{zp(2)};{ab};{ab + timedelta(days=40)};100\n")
+    c.post(f"/verwaltung/gruppe/{gid}/abrechnung", auth=auth, files={"report": ("r.csv", csv, "text/csv")})
+    with Session(engine) as s:
+        rechnungen = s.exec(select(Rechnung).order_by(Rechnung.bis)).all()
+    assert [r.brutto for r in rechnungen] == [10.0, 12.0]
+    seite = c.get(bereich).text
+    assert rechnungen[0].nummer in seite
+    rechnung = c.get(f"{bereich}/rechnung/{rechnungen[0].id}").text
+    assert "<svg" in rechnung and "AT61 1904" in rechnung
+    assert c.get(f"{erz}/rechnung/{rechnungen[0].id}").status_code == 200
+    assert "Einnahmen je Jahr" in c.get(erz).text
+
+    # Als gesendet markieren leert den Postausgang
+    with Session(engine) as s:
+        offen = s.exec(select(main.Nachricht)).all()
+    for n in offen:
+        c.post(f"/verwaltung/postausgang/{n.id}/gesendet", auth=auth)
+    assert "Nichts offen" in c.get("/verwaltung/postausgang", auth=auth).text
+    assert "aktive Gruppen" in c.get("/verwaltung", auth=auth).text
+
+
+def test_neue_spalten_in_alter_datenbank(monkeypatch, tmp_path):
+    from sqlalchemy import inspect, text
+    alt = create_engine(f"sqlite:///{tmp_path / 'alt.db'}")
+    with alt.begin() as v:
+        v.execute(text("CREATE TABLE teilnehmer (id INTEGER PRIMARY KEY, vorname VARCHAR)"))
+    monkeypatch.setattr(main, "engine", alt)
+    main._spalten_ergaenzen()
+    assert "iban" in {c["name"] for c in inspect(alt).get_columns("teilnehmer")}
+
+
+def test_geheimnis_bleibt_nach_neustart(monkeypatch, tmp_path):
+    from app import config
+    monkeypatch.delenv("NACHBARSTROM_SECRET", raising=False)
+    monkeypatch.setattr(config, "GEHEIMNIS_DATEI", tmp_path / "g")
+    erster = config._geheimnis()
+    assert len(erster) == 64 and config._geheimnis() == erster
+
+
+def _kleine_gruppe():
+    e = _t(1, Rolle.ERZEUGER, kwh=3000, kwp=10)
+    return e, [_t(2, Rolle.ABNEHMER, Profiltyp.HAUSHALT, 4000), _t(3, Rolle.ABNEHMER, Profiltyp.GEWERBE, 12000)]
+
+
+def test_eda_export_schreiben_und_lesen():
+    from app import energiedaten as ed
+    e, ab = _kleine_gruppe()
+    zeiten = ed.viertelstunden(date(2026, 6, 1), date(2026, 6, 3))
+    spuren = ed.simulieren(e, ab, zeiten)
+    erz = spuren[0].werte
+    geteilt = sum(sum(s.werte["eigendeckung"]) for s in spuren[1:])
+    # Was geteilt wird plus Rest ergibt die Einspeisung, kein Abnehmer bekommt mehr als er verbraucht
+    assert geteilt + sum(erz["restueberschuss"]) == pytest.approx(sum(erz["erzeugung"]))
+    assert all(d <= v + 1e-9 for s in spuren[1:] for d, v in zip(s.werte["eigendeckung"], s.werte["verbrauch"]))
+    imp = ed.export_einlesen(ed.export_schreiben(spuren, zeiten, "AT-TEST"))
+    assert len(imp.werte) == 3 * 96 * 3 and imp.zaehlpunkte == {zp(1), zp(2), zp(3)}
+    assert imp.von == zeiten[0] and imp.bis == zeiten[-1]
+    eingelesen = sum(w["eigendeckung"] for w in imp.werte if w["zaehlpunkt"] == zp(3))
+    assert eingelesen == pytest.approx(sum(spuren[2].werte["eigendeckung"]), abs=0.01)
+
+
+def test_eda_export_mit_anderen_ueberschriften():
+    import io
+    from openpyxl import Workbook
+    from app import energiedaten as ed
+    wb = Workbook()
+    ws = wb.active
+    ws.append(["Bericht"])
+    ws.append(["Zählpunkt", zp(2), zp(1)])
+    ws.append(["Energy direction", "CONSUMPTION", "GENERATION"])
+    ws.append(["Zeit", "Eigendeckung gemeinschaftliche Erzeugung [KWH]", "Gesamte gemeinschaftliche Erzeugung [KWH]"])
+    ws.append(["01.06.2026 12:00", "1,5", 2])
+    ws.append(["01.06.2026 12:15", "0,5", 1])
+    puffer = io.BytesIO()
+    wb.save(puffer)
+    imp = ed.export_einlesen(puffer.getvalue())
+    assert sum(w["eigendeckung"] for w in imp.werte) == 2.0 and sum(w["erzeugung"] for w in imp.werte) == 3.0
+    with pytest.raises(ValueError):
+        ed.export_einlesen(b"keine Excel-Datei")
+
+
+def test_abrechnungslauf_aus_energiedaten(client):
+    from app import energiedaten as ed
+    c, engine = client
+    auth = ("admin", "test")
+    _anmelden(c, "erzeuger", 1, anlage_kwp=10, jahresverbrauch_kwh=3000, profiltyp="haushalt")
+    _anmelden(c, "abnehmer", 2)
+    r = c.post("/verwaltung/gruppe", data={"erzeuger_id": 1, "abnehmer_ids": "2"}, auth=auth, follow_redirects=False)
+    gid = int(r.headers["location"].rsplit("/", 1)[1])
+    c.post(f"/verwaltung/gruppe/{gid}", auth=auth, data={"status": "aktiv", "preis_ct_kwh": 10, "ust_satz": 0,
+                                                         "rechnung_monatlich": "true"})
+    # Ohne Energiedaten gibt es keine Rechnung, sondern einen Hinweis
+    lauf = {"von": "2026-06-01", "bis": "2026-06-30"}
+    assert "fehlen Energiedaten (Jun 26)" in c.post(f"/verwaltung/gruppe/{gid}/abrechnungslauf", auth=auth, data=lauf).text
+
+    with Session(engine) as s:
+        e, a = s.get(Teilnehmer, 1), s.get(Teilnehmer, 2)
+        zeiten = ed.viertelstunden(date(2026, 6, 1), date(2026, 6, 30))
+        spuren = ed.simulieren(e, [a], zeiten)
+    datei = ed.export_schreiben(spuren, zeiten, "AT-TEST")
+    seite = c.post("/verwaltung/energiedaten", auth=auth, files=[("dateien", ("juni.xlsx", datei))]).text
+    assert "5.760" in seite  # 30 Tage × 96 Viertelstunden für zwei Zählpunkte
+    # Nochmal hochladen ersetzt statt doppelt zu zählen
+    c.post("/verwaltung/energiedaten", auth=auth, files=[("dateien", ("juni.xlsx", datei))])
+    gruppe = c.get(f"/verwaltung/gruppe/{gid}", auth=auth).text
+    assert 'value="2026-06-01"' in gruppe and "Tagesverlauf" in gruppe
+
+    assert "1 Rechnung(en) erstellt" in c.post(f"/verwaltung/gruppe/{gid}/abrechnungslauf", auth=auth, data=lauf).text
+    with Session(engine) as s:
+        r = s.exec(select(Rechnung)).one()
+    erwartet = sum(spuren[1].werte["eigendeckung"])
+    assert r.kwh == pytest.approx(erwartet, abs=0.05) and r.brutto == pytest.approx(round(erwartet * 0.1, 2), abs=0.01)
+    assert 'value="2026-07-01"' in c.get(f"/verwaltung/gruppe/{gid}", auth=auth).text  # nächster Vorschlag
+
+    # Zahlungsstatus und Zahlungserinnerung
+    assert "überfällig" in c.get("/verwaltung/rechnungen", auth=auth).text or "offen" in c.get(
+        "/verwaltung/rechnungen", auth=auth).text
+    c.post(f"/verwaltung/rechnung/{r.id}/mahnung", auth=auth)
+    assert "Zahlungserinnerung" in c.get("/verwaltung/postausgang", auth=auth).text
+    c.post(f"/verwaltung/rechnung/{r.id}/bezahlt", auth=auth, data={"zurueck": "/verwaltung/rechnungen"})
+    with Session(engine) as s:
+        assert s.get(Rechnung, r.id).bezahlt_am == date.today()
+    assert "Sonnenstrom vom Nachbarn" in c.get(re.search(r"(/mein/2/\w+)", c.get(
+        "/verwaltung/teilnehmer", auth=auth).text).group(1)).text
+
+
+def test_testbetrieb_anlegen(monkeypatch, tmp_path):
+    import demo_daten
+    engine = create_engine(f"sqlite:///{tmp_path / 'demo.db'}")
+    monkeypatch.setattr(demo_daten, "engine", engine)
+    monkeypatch.setattr(demo_daten.config, "TESTDATEN", tmp_path / "testdaten")
+    monkeypatch.setattr(demo_daten, "JAHR_VON", date(2026, 8, 1))
+    demo_daten.anlegen(neu=True)
+    assert sorted(p.name for p in (tmp_path / "testdaten").glob("*.xlsx")) == [
+        "EDA_Export_Gruppe1_2026-08.xlsx", "EDA_Export_Gruppe1_2026-09.xlsx",
+        "EDA_Export_Gruppe2_2026-08.xlsx", "EDA_Export_Gruppe2_2026-09.xlsx"]
+    with Session(engine) as s:
+        assert len(s.exec(select(Rechnung)).all()) == 3  # Gruppe 1, August, drei Abnehmer
+        assert not s.exec(select(main.Messwert).where(main.Messwert.beginn >= "2026-09")).first()

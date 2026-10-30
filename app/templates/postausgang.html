@@ -1,0 +1,14 @@
+{% extends "verwaltung_basis.html" %}
+{% block inhalt %}
+<h1>Postausgang</h1>
+<p class="klein">Hier liegen alle Mails als fertige Entwürfe. „Im Mailprogramm öffnen“ füllt Empfänger, Betreff und Text aus. Erst nach dem Senden auf „gesendet“ klicken. Die Plattform selbst verschickt nichts.</p>
+{% for n in offen %}{% set t = empfaenger[n.teilnehmer_id] %}
+<div class="karte" style="margin-bottom:12px"><b>{{ t.name }}</b> · {{ t.email }} · <span class="klein">{{ n.art }}, erstellt {{ n.erstellt.strftime("%d.%m.%Y %H:%M") }}</span>
+<p><b>{{ n.betreff }}</b></p><pre style="white-space:pre-wrap">{{ n.text }}</pre>
+<a class="knopf" href="{{ links[n.id] }}">Im Mailprogramm öffnen</a>
+<form method="post" action="/verwaltung/postausgang/{{ n.id }}/gesendet" style="display:inline"><button class="zweit">Gesendet</button></form></div>
+{% else %}<p>Nichts offen.</p>{% endfor %}
+{% if gesendet %}<h2>Zuletzt gesendet</h2>
+<table><tr><th>Gesendet</th><th>An</th><th>Betreff</th></tr>
+{% for n in gesendet %}<tr><td>{{ n.gesendet_am.strftime("%d.%m.%Y %H:%M") }}</td><td>{{ empfaenger[n.teilnehmer_id].name }}</td><td>{{ n.betreff }}</td></tr>{% endfor %}</table>{% endif %}
+{% endblock %}

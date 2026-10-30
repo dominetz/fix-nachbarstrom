@@ -1,0 +1,17 @@
+{% extends "verwaltung_basis.html" %}
+{% import "_status.html" as status %}
+{% block inhalt %}
+<h1>Rechnungen</h1>
+<p class="unter">Alle Rechnungen, die im Namen der Erzeuger gestellt wurden. Gezahlt wird direkt an den Erzeuger, hier wird der Eingang abgehakt.</p>
+<div class="raster">
+<a class="kpi" href="?filter=offen"><div class="wert">{{ summen["offen"]|zahl(2) }} <small>€</small></div><div class="label">offen, noch nicht fällig</div></a>
+<a class="kpi" href="?filter=überfällig"><div class="wert">{{ summen["überfällig"]|zahl(2) }} <small>€</small></div><div class="label">überfällig</div></a>
+<a class="kpi" href="?filter=bezahlt"><div class="wert">{{ summen["bezahlt"]|zahl(2) }} <small>€</small></div><div class="label">bezahlt</div></a>
+</div>
+<p class="nicht-drucken">{% for f, text in [("", "Alle"), ("offen", "Offen"), ("überfällig", "Überfällig"), ("bezahlt", "Bezahlt")] %}<a class="knopf {{ '' if filter == f else 'zweit' }} klein-knopf" href="?filter={{ f }}">{{ text }}</a> {% endfor %}</p>
+<div class="karte tabelle"><table><tr><th>Nummer</th><th>Gruppe</th><th>Abnehmer</th><th>Zeitraum</th><th class="zahl">kWh</th><th class="zahl">Brutto</th><th>Fällig</th><th>Status</th><th></th></tr>
+{% for r in liste %}{% set st = rechnung_status(r) %}<tr><td><a href="/verwaltung/rechnung/{{ r.id }}">{{ r.nummer }}</a></td><td><a href="/verwaltung/gruppe/{{ r.gruppe_id }}">{{ r.gruppe_id }}</a></td><td>{{ namen[r.abnehmer_id] }}</td><td>{{ r.von.strftime("%d.%m.%y") }} – {{ r.bis.strftime("%d.%m.%y") }}</td><td class="zahl">{{ r.kwh|zahl(1) }}</td><td class="zahl">{{ r.brutto|zahl(2) }} €</td><td>{{ r.faellig.strftime("%d.%m.%Y") }}</td><td>{{ status.rechnung(r) }}{% if r.gemahnt_am %}<br><span class="klein">erinnert {{ r.gemahnt_am.strftime("%d.%m.") }}</span>{% endif %}</td>
+<td style="white-space:nowrap"><form method="post" action="/verwaltung/rechnung/{{ r.id }}/bezahlt" style="display:inline"><input type="hidden" name="zurueck" value="/verwaltung/rechnungen?filter={{ filter }}"><button class="zweit klein-knopf">{{ "Offen setzen" if r.bezahlt_am else "Bezahlt" }}</button></form>
+{% if st == "überfällig" %}<form method="post" action="/verwaltung/rechnung/{{ r.id }}/mahnung" style="display:inline"><button class="klein-knopf">Erinnern</button></form>{% endif %}</td></tr>
+{% else %}<tr><td colspan="9">Keine Rechnungen.</td></tr>{% endfor %}</table></div>
+{% endblock %}

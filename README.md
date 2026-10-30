@@ -4,7 +4,7 @@ Plattform für Peer-to-Peer-Stromverträge (§ 68 ElWG): Erzeuger und Abnehmer m
 
 FIX PV handelt als bevollmächtigter Dienstleister, nicht als Organisator.
 
-## Stand (Stufe 1)
+## Stand (Stufe 1 und 2)
 
 | Funktion | Stand |
 |---|---|
@@ -16,8 +16,17 @@ FIX PV handelt als bevollmächtigter Dienstleister, nicht als Organisator.
 | Status je Gruppe, Zustimmung je Teilnehmer | fertig |
 | Erinnerungsliste mit fertigem Text | fertig, Versand per Hand |
 | Abrechnung aus CSV-Report, Rechnung mit Mindestinhalt nach § 69 | fertig |
-| Automatische EDA-Anbindung (E-Mail/KEP) | Stufe 2 |
-| Mailversand, SEPA-Lastschrift | später, nach Freigabe |
+| Persönlicher Bereich je Teilnehmer (Stand, offene Schritte, Rechnungen, Infoblatt) | fertig (Stufe 2) |
+| Postausgang: alle Mails als Entwurf, Öffnen im Mailprogramm, „gesendet“ markieren | fertig (Stufe 2), die Plattform verschickt nichts selbst |
+| Zahlung: IBAN des Erzeugers, QR-Code (EPC/GiroCode) auf jeder Rechnung | fertig (Stufe 2) |
+| Informationsblatt und Preisänderung mit 1 Monat Vorlauf (§ 69 ElWG) | fertig (Stufe 2), Texte juristisch prüfen |
+| Kennzahlen in der Übersicht | fertig (Stufe 2) |
+| Energiedaten: Import des EDA-Monatsexports (Excel), Viertelstundenwerte, Übersicht was fehlt | fertig, Aufbau an ersten echten Export anpassen |
+| Abrechnung auf Knopfdruck aus den Energiedaten (Monat/Jahr), Zahlungsstatus, Zahlungserinnerung | fertig |
+| Diagramme je Monat und Tagesverlauf in Verwaltung und Kundenbereich | fertig |
+| Testbetrieb: erfundene Kunden, fiktives Jahr 10/2025–09/2026 als EDA-Exporte (`python demo_daten.py --neu`) | fertig |
+| Automatische EDA-Anbindung (E-Mail/KEP) | braucht Marktpartner-ID und EDA-Zugang |
+| Automatischer Mailversand (SMTP), SEPA-Lastschrift | später, nach Freigabe |
 
 ## Starten unter Windows
 
@@ -29,7 +38,7 @@ Doppelklick auf `Nachbarstrom starten.bat`. Beim ersten Start wird alles eingeri
 python -m venv .venv && . .venv/bin/activate
 pip install -r requirements.txt
 export NACHBARSTROM_ADMIN_PASSWORD='…'   # ohne Passwort ist die Verwaltung gesperrt
-export NACHBARSTROM_SECRET='…'           # langer Zufallswert für die Unterschrifts-Links
+export NACHBARSTROM_SECRET='…'           # optional; sonst wird beim ersten Start nachbarstrom.geheimnis angelegt
 python demo_daten.py                     # optional: erfundene Beispieldaten
 uvicorn app.main:app --port 8000
 ```

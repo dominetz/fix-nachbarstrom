@@ -3,28 +3,87 @@
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{% block titel %}{{ marke }}{% endblock %}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
-:root{--gruen:#57b33e;--text:#1d2a1a;--grau:#6b7568;--linie:#e3e8e1;--hell:#f5f8f4}
-*{box-sizing:border-box}body{margin:0;font-family:Rubik,system-ui,sans-serif;color:var(--text);background:#fff;line-height:1.5}
-header{background:var(--gruen);color:#fff;padding:12px 16px}header a{color:#fff;text-decoration:none;font-weight:600}
-nav a{color:#fff;margin-left:16px;font-weight:400}
-main{max-width:960px;margin:0 auto;padding:24px 16px}
-h1{font-size:1.6rem;margin:.2em 0 .6em}h2{font-size:1.2rem;margin-top:1.6em}
-table{width:100%;border-collapse:collapse;margin:8px 0}th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--linie);vertical-align:top}
-th{background:var(--hell);font-weight:600}
-label{display:block;margin:10px 0 2px;font-weight:500}input,select,textarea{width:100%;padding:8px;border:1px solid #c9d1c6;border-radius:6px;font:inherit}
-input[type=checkbox]{width:auto}button,.knopf{background:var(--gruen);color:#fff;border:0;border-radius:6px;padding:9px 16px;font:inherit;cursor:pointer;text-decoration:none;display:inline-block}
-.zweit{background:#fff;color:var(--gruen);border:1px solid var(--gruen)}
-.hinweis{background:var(--hell);border-left:4px solid var(--gruen);padding:10px 14px;margin:12px 0}
-.fehler{background:#fdeeee;border-left:4px solid #c0392b;padding:10px 14px}
-.klein{color:var(--grau);font-size:.9rem}.raster{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
-.karte{border:1px solid var(--linie);border-radius:8px;padding:14px}
-code{background:var(--hell);padding:1px 4px;border-radius:4px;word-break:break-all}
-@media print{header,nav,.nicht-drucken{display:none}main{max-width:none}}
+:root{--gruen:#57b33e;--gruen-dunkel:#3f8a2c;--gruen-hell:#eef7ea;--text:#1d2a1a;--grau:#66705f;--linie:#e3e8e1;--hell:#f6f8f5;--flaeche:#fff;
+--rot:#c0392b;--rot-hell:#fdeeee;--gelb:#a66a00;--gelb-hell:#fff6e0;--blau-hell:#eaf2fc;
+--reihe-1:#3f9a2c;--reihe-2:#2a78d6;--reihe-3:#eda100;--reihe-grau:#c9cfc6}
+*{box-sizing:border-box}
+body{margin:0;font-family:Rubik,system-ui,-apple-system,"Segoe UI",sans-serif;color:var(--text);background:var(--hell);line-height:1.5}
+a{color:var(--gruen-dunkel)}
+header{background:var(--flaeche);border-bottom:1px solid var(--linie);padding:0 20px;display:flex;align-items:center;gap:24px;flex-wrap:wrap;position:sticky;top:0;z-index:5}
+.marke{display:flex;align-items:center;gap:10px;font-weight:700;font-size:1.1rem;color:var(--text);text-decoration:none;padding:14px 0}
+.marke svg{flex:none}
+nav{display:flex;gap:4px;flex-wrap:wrap}
+nav a{color:var(--grau);text-decoration:none;padding:8px 12px;border-radius:8px;font-weight:500;font-size:.95rem}
+nav a:hover{background:var(--hell);color:var(--text)}
+nav a.aktiv{background:var(--gruen-hell);color:var(--gruen-dunkel)}
+nav .zahl{background:var(--rot);color:#fff;border-radius:10px;font-size:.72rem;padding:1px 6px;margin-left:4px;vertical-align:1px}
+main{max-width:1120px;margin:0 auto;padding:28px 20px 60px}
+h1{font-size:1.7rem;margin:.1em 0 .3em;letter-spacing:-.01em}
+h2{font-size:1.15rem;margin:0 0 .6em}
+.unter{color:var(--grau);margin:0 0 20px}
+.karte{background:var(--flaeche);border:1px solid var(--linie);border-radius:12px;padding:18px 20px;margin-bottom:16px}
+.raster{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;margin-bottom:16px}
+.zwei{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px}
+.kpi{background:var(--flaeche);border:1px solid var(--linie);border-radius:12px;padding:14px 16px;text-decoration:none;color:inherit;display:block}
+.kpi .wert{font-size:1.65rem;font-weight:600;line-height:1.2;font-variant-numeric:tabular-nums}
+.kpi .wert small{font-size:.9rem;font-weight:500;color:var(--grau)}
+.kpi .label{color:var(--grau);font-size:.88rem}
+a.kpi:hover{border-color:var(--gruen)}
+table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--linie);vertical-align:middle}
+th{font-weight:500;color:var(--grau);font-size:.85rem;background:var(--hell)}
+tr:hover td{background:#fafcf9}
+td.zahl,th.zahl{text-align:right}
+.tabelle{overflow-x:auto}
+label{display:block;margin:10px 0 4px;font-weight:500;font-size:.92rem}
+input,select,textarea{width:100%;padding:9px 10px;border:1px solid #cfd6cb;border-radius:8px;font:inherit;background:#fff}
+input:focus,select:focus,textarea:focus{outline:2px solid var(--gruen);border-color:var(--gruen)}
+input[type=checkbox]{width:auto}
+button,.knopf{background:var(--gruen);color:#fff;border:0;border-radius:8px;padding:9px 16px;font:inherit;font-weight:500;cursor:pointer;text-decoration:none;display:inline-block;white-space:nowrap}
+button:hover,.knopf:hover{background:var(--gruen-dunkel)}
+.zweit{background:#fff;color:var(--gruen-dunkel);border:1px solid #bcd9b2}
+.zweit:hover{background:var(--gruen-hell)}
+.klein-knopf{padding:5px 10px;font-size:.85rem}
+.zeile{display:flex;gap:8px;align-items:end;flex-wrap:wrap}.zeile>div{flex:1;min-width:150px}
+.hinweis{background:var(--gruen-hell);border-left:4px solid var(--gruen);padding:12px 16px;margin:12px 0;border-radius:0 8px 8px 0}
+.fehler{background:var(--rot-hell);border-left:4px solid var(--rot);padding:12px 16px;border-radius:0 8px 8px 0;margin:12px 0}
+.warnung{background:var(--gelb-hell);border-left:4px solid var(--reihe-3);padding:12px 16px;border-radius:0 8px 8px 0;margin:12px 0}
+.klein{color:var(--grau);font-size:.88rem}
+.badge{display:inline-block;padding:2px 9px;border-radius:20px;font-size:.8rem;font-weight:500;white-space:nowrap}
+.badge.ok{background:var(--gruen-hell);color:var(--gruen-dunkel)}
+.badge.warn{background:var(--gelb-hell);color:var(--gelb)}
+.badge.rot{background:var(--rot-hell);color:var(--rot)}
+.badge.neutral{background:#eef0ec;color:var(--grau)}
+.badge.blau{background:var(--blau-hell);color:#1f5fa8}
+code{background:var(--hell);padding:1px 5px;border-radius:4px;word-break:break-all;font-size:.88em}
+.aufgaben{list-style:none;padding:0;margin:0}.aufgaben li{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--linie)}
+.aufgaben li:last-child{border-bottom:0}
+.schritte{display:flex;gap:0;margin:8px 0 4px;flex-wrap:wrap}
+.schritte div{flex:1;min-width:110px;text-align:center;font-size:.82rem;color:var(--grau);position:relative;padding-top:30px}
+.schritte div::before{content:"";position:absolute;top:8px;left:50%;width:16px;height:16px;margin-left:-8px;border-radius:50%;background:#dfe4dc;z-index:1}
+.schritte div::after{content:"";position:absolute;top:15px;left:-50%;width:100%;height:2px;background:#dfe4dc}
+.schritte div:first-child::after{display:none}
+.schritte div.ja{color:var(--text)}.schritte div.ja::before,.schritte div.ja::after{background:var(--gruen)}
+.diagramm{width:100%;height:auto;display:block}
+.diagramm .gitter{stroke:var(--linie);stroke-width:1}
+.diagramm .basis{stroke:#9aa596;stroke-width:1}
+.diagramm .achse{font-size:12px;fill:var(--grau);font-family:inherit}
+.diagramm .linie{fill:none;stroke-width:2;stroke-linejoin:round}
+.diagramm .treffer{fill:transparent}
+.diagramm .treffer:hover{fill:rgba(0,0,0,.04)}
+.legende{display:flex;gap:16px;flex-wrap:wrap;font-size:.85rem;color:var(--grau);margin-bottom:6px}
+.leg i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:0}
+.fuss{color:var(--grau);font-size:.82rem;text-align:center;padding:20px}
+@media (max-width:640px){header{gap:6px}nav a{padding:6px 8px}main{padding:18px 14px 40px}}
+@media print{body{background:#fff}header,nav,.nicht-drucken{display:none!important}main{max-width:none;padding:0}.karte{border:0;padding:0}}
 </style>
 </head>
 <body>
-<header><a href="/">{{ marke }}</a>{% block nav %}{% endblock %}</header>
+<header><a class="marke" href="{% block markenlink %}/{% endblock %}"><svg width="30" height="30" viewBox="0 0 30 30" aria-hidden="true"><circle cx="15" cy="15" r="15" fill="#57b33e"/><circle cx="15" cy="13" r="5" fill="#fff"/><path d="M15 3v3M15 20v3M5 13h3M22 13h3M8 6l2 2M22 6l-2 2" stroke="#fff" stroke-width="2" stroke-linecap="round"/><path d="M7 25c3-3 13-3 16 0" stroke="#fff" stroke-width="2" fill="none" stroke-linecap="round"/></svg>{{ marke }}</a>{% block nav %}{% endblock %}</header>
 <main>{% block inhalt %}{% endblock %}</main>
+<div class="fuss nicht-drucken">{{ marke }} · ein Service der {{ dienstleister.firma }} · {{ dienstleister.email }}</div>
 </body>
 </html>

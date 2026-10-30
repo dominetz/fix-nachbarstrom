@@ -1,0 +1,67 @@
+{% extends "basis.html" %}
+{% import "_status.html" as status %}
+{% block titel %}Mein {{ marke }}{% endblock %}
+{% block markenlink %}/mein/{{ t.id }}/{{ token }}{% endblock %}
+{% block inhalt %}
+{% set erz = t.rolle.value == "erzeuger" %}
+<h1>Hallo {{ t.vorname }}!</h1>
+<p class="unter">Ihr Bereich als {{ "Erzeuger" if erz else "Abnehmer" }} · Zählpunkt <code>{{ maskiert(t.zaehlpunkt) }}</code></p>
+
+{% if aufgaben %}<div class="karte" style="border-color:#f0d9a0;background:var(--gelb-hell)"><h2>Zu erledigen</h2><ul class="aufgaben">
+{% for text, link in aufgaben %}<li><span>{{ text }}</span>{% if link %}<a class="knopf klein-knopf" href="{{ link }}">Jetzt erledigen</a>{% endif %}</li>{% endfor %}</ul></div>{% endif %}
+
+{% if not g %}
+<div class="karte"><h2>Wir suchen Ihren Partner</h2><p>Wir suchen gerade passende Partner in Ihrer Nähe. Sobald es einen Vorschlag gibt, melden wir uns per E-Mail.</p></div>
+{% else %}
+<div class="karte"><h2>Stand</h2>
+<div class="schritte"><div class="ja">Angemeldet</div>{% for s in schritte %}<div class="{{ 'ja' if loop.index0 <= erreicht }}">{{ {"vertrag_offen": "Partner gefunden", "unterschrieben": "Unterschrieben", "registriert": "Registriert", "eda_angemeldet": "Beim Netz angemeldet", "aktiv": "Aktiv"}[s.value] }}</div>{% endfor %}</div>
+{% if g.status.value == "beendet" %}<p>Diese Gruppe ist beendet.</p>{% endif %}
+</div>
+
+{% if a %}
+<div class="raster">
+{% if erz %}
+<div class="kpi"><div class="wert">{{ (a.einspeisung - a.rest)|zahl }} <small>kWh</small></div><div class="label">an Ihre Abnehmer geteilt (12 Monate)</div></div>
+<div class="kpi"><div class="wert">{{ ((a.einspeisung - a.rest) / a.einspeisung * 100 if a.einspeisung else 0)|zahl }} <small>%</small></div><div class="label">Ihres Überschusses ging an Nachbarn</div></div>
+<div class="kpi"><div class="wert">{{ (rechnungen|sum(attribute="brutto"))|zahl(2) }} <small>€</small></div><div class="label">abgerechnet (alle Rechnungen)</div></div>
+{% else %}
+<div class="kpi"><div class="wert">{{ a.geteilt|zahl }} <small>kWh</small></div><div class="label">Sonnenstrom vom Nachbarn (12 Monate)</div></div>
+<div class="kpi"><div class="wert">{{ (a.geteilt / a.verbrauch * 100 if a.verbrauch else 0)|zahl }} <small>%</small></div><div class="label">Ihres Verbrauchs</div></div>
+<div class="kpi"><div class="wert">{{ a.verbrauch|zahl }} <small>kWh</small></div><div class="label">Gesamtverbrauch (12 Monate)</div></div>
+{% endif %}
+</div>
+<div class="karte"><h2>Je Monat</h2>{{ a.diagramm|safe }}
+<p class="klein">Werte aus den Messdaten Ihres Netzbetreibers. {% if not erz %}Den restlichen Strom liefert wie bisher Ihr eigener Lieferant.{% else %}Was Ihre Abnehmer nicht brauchen, geht wie bisher ins Netz.{% endif %}</p></div>
+{% endif %}
+
+<div class="zwei">
+<div class="karte"><h2>Ihre Gruppe</h2>
+<ul class="aufgaben">{% for p in partner %}<li><span>{{ p.vorname }}{% if p.id == t.id %} (Sie){% endif %}</span><span class="klein">{{ "Erzeuger" if p.rolle.value == "erzeuger" else "Abnehmer" }}, {{ p.ort }}</span></li>{% endfor %}</ul>
+<p>Preis: {% if preis_heute > 0 %}<b>{{ preis_heute|zahl(2) }} ct/kWh</b> netto{% else %}unentgeltlich{% endif %}{% if g.preis_neu_ab %}<br><span class="klein">ab {{ g.preis_neu_ab.strftime("%d.%m.%Y") }}: {{ g.preis_neu_ct_kwh|zahl(2) }} ct/kWh</span>{% endif %}</p>
+<p><a class="knopf zweit" href="/mein/{{ t.id }}/{{ token }}/infoblatt">Informationsblatt</a></p></div>
+
+<div class="karte"><h2>{{ "Einnahmen je Jahr" if erz else "Kosten je Jahr" }}</h2>
+<table><tr><th>Jahr</th><th class="zahl">kWh</th><th class="zahl">Betrag</th><th class="zahl">{{ "eingegangen" if erz else "bezahlt" }}</th></tr>
+{% for jahr, w in jahre %}<tr><td>{{ jahr }}</td><td class="zahl">{{ w.kwh|zahl }}</td><td class="zahl">{{ w.brutto|zahl(2) }} €</td><td class="zahl">{{ w.bezahlt|zahl(2) }} €</td></tr>
+{% else %}<tr><td colspan="4" class="klein">Noch keine Rechnungen.</td></tr>{% endfor %}</table></div>
+</div>
+
+<div class="karte tabelle"><h2>Rechnungen</h2>
+<table><tr><th>Nummer</th>{% if erz %}<th>Abnehmer</th>{% endif %}<th>Zeitraum</th><th class="zahl">kWh</th><th class="zahl">Betrag</th><th>Fällig</th><th>Status</th></tr>
+{% for r in rechnungen %}{% if loop.index == 10 %}</table><details><summary class="klein" style="margin:8px 0">Ältere Rechnungen ({{ rechnungen|length - 9 }})</summary><table>{% endif %}<tr><td><a href="/mein/{{ t.id }}/{{ token }}/rechnung/{{ r.id }}">{{ r.nummer }}</a></td>{% if erz %}<td>{% for p in partner %}{% if p.id == r.abnehmer_id %}{{ p.vorname }}{% endif %}{% endfor %}</td>{% endif %}<td>{{ r.von.strftime("%d.%m.%Y") }} – {{ r.bis.strftime("%d.%m.%Y") }}</td><td class="zahl">{{ r.kwh|zahl(1) }}</td><td class="zahl">{{ r.brutto|zahl(2) }} €</td><td>{{ r.faellig.strftime("%d.%m.%Y") }}</td><td>{{ status.rechnung(r) }}</td></tr>
+{% else %}<tr><td colspan="7">Noch keine Rechnungen.</td></tr>{% endfor %}
+</table>{% if rechnungen|length >= 10 %}</details>{% endif %}</div>
+{% endif %}
+
+{% if erz %}
+<div class="zwei">
+<div class="karte"><h2>Konto für Zahlungen</h2>
+<p class="klein">Ihre Abnehmer überweisen direkt auf dieses Konto. Die IBAN steht mit QR-Code auf jeder Rechnung.</p>
+{% if iban %}<p>Hinterlegt: <code>{{ iban }}</code></p>{% endif %}
+{% if iban_fehler %}<p class="fehler">Diese IBAN stimmt nicht. Bitte noch einmal prüfen.</p>{% endif %}
+<form method="post" action="/mein/{{ t.id }}/{{ token }}/iban" class="zeile"><div><input name="iban" required placeholder="AT.. .... .... .... ...."></div><button>{{ "Ändern" if iban else "Speichern" }}</button></form></div>
+{% if einladung %}<div class="karte"><h2>Nachbarn einladen</h2><p>Wer sich über diesen Link anmeldet, wird Ihnen zuerst zugeordnet:</p><p><code>{{ einladung }}</code></p></div>{% endif %}
+</div>
+{% endif %}
+<p class="klein">Fragen? {{ dienstleister.email }}</p>
+{% endblock %}
