@@ -6,6 +6,15 @@
 <div class="karte"><b>{{ abnehmer }}</b> Abnehmer angemeldet</div>
 <div class="karte"><b>{{ zeilen|length }}</b> Gruppen</div>
 <div class="karte"><a href="/verwaltung/erinnerungen"><b>{{ anzahl_erinnerungen }}</b> Erinnerungen heute fällig</a></div>
+<div class="karte"><a href="/verwaltung/postausgang"><b>{{ k.postausgang }}</b> Mails im Postausgang</a></div>
+</div>
+<h2>Kennzahlen</h2>
+<div class="raster">
+<div class="karte"><b>{{ k.aktive_gruppen }}</b> aktive Gruppen</div>
+<div class="karte"><b>{{ k.zaehlpunkte_aktiv }}</b> Zählpunkte in aktiven Gruppen</div>
+<div class="karte"><b>{{ k.kwh_erwartet|zahl }}</b> kWh/Jahr erwartet (berechnet)</div>
+<div class="karte"><b>{{ k.kwh_abgerechnet|zahl }}</b> kWh abgerechnet</div>
+<div class="karte"><b>{{ k.umsatz_abgerechnet|zahl(2) }} €</b> an Erzeuger abgerechnet</div>
 </div>
 <h2>Gruppen</h2>
 <table><tr><th>Nr.</th><th>Erzeuger</th><th>Status</th><th>Erwartet kWh/Jahr</th><th>Zone</th></tr>

@@ -1,0 +1,42 @@
+{% extends "basis.html" %}
+{% block titel %}Mein {{ marke }}{% endblock %}
+{% block inhalt %}
+<h1>Hallo {{ t.vorname }}!</h1>
+<p class="klein">Ihr persönlicher Bereich als {{ "Erzeuger" if t.rolle.value == "erzeuger" else "Abnehmer" }} · Zählpunkt <code>{{ maskiert(t.zaehlpunkt) }}</code></p>
+
+{% if aufgaben %}<h2>Zu erledigen</h2>
+{% for text, link in aufgaben %}<div class="hinweis">{% if link %}<a class="knopf" href="{{ link }}">{{ text }}</a>{% else %}{{ text }}{% endif %}</div>{% endfor %}
+{% endif %}
+
+<h2>Stand</h2>
+{% if not g %}<p>Wir suchen gerade passende Partner in Ihrer Nähe. Sobald es einen Vorschlag gibt, melden wir uns per E-Mail.</p>
+{% else %}
+<table>
+<tr><td>{{ "✓" }}</td><td>Angemeldet</td></tr>
+{% for s in schritte %}<tr><td>{{ "✓" if loop.index0 <= erreicht else "○" }}</td><td>{{ status_text[s] if s.value != "vertrag_offen" else "Partner gefunden" }}</td></tr>{% endfor %}
+</table>
+{% if g.status.value == "beendet" %}<p>Diese Gruppe ist beendet.</p>{% endif %}
+<h2>Ihre Gruppe</h2>
+<p>{% for p in partner %}{{ p.vorname }} ({{ "Erzeuger" if p.rolle.value == "erzeuger" else "Abnehmer" }}, {{ p.ort }}){{ ", " if not loop.last }}{% endfor %}</p>
+<p>Preis heute: {% if preis_heute > 0 %}{{ preis_heute|zahl(2) }} ct/kWh netto{% else %}unentgeltlich{% endif %}{% if g.preis_neu_ab %} · ab {{ g.preis_neu_ab.strftime("%d.%m.%Y") }}: {{ g.preis_neu_ct_kwh|zahl(2) }} ct/kWh{% endif %}
+· erwartet rund {{ g.erwartete_kwh_jahr|zahl }} kWh im Jahr für die ganze Gruppe (berechnet)</p>
+<p><a class="knopf zweit" href="/mein/{{ t.id }}/{{ token }}/infoblatt">Informationsblatt</a></p>
+
+<h2>Rechnungen</h2>
+<table><tr><th>Nummer</th><th>Zeitraum</th><th>kWh</th><th>Betrag</th><th>Fällig</th></tr>
+{% for r in rechnungen %}<tr><td><a href="/mein/{{ t.id }}/{{ token }}/rechnung/{{ r.id }}">{{ r.nummer }}</a></td><td>{{ r.von.strftime("%d.%m.%Y") }} – {{ r.bis.strftime("%d.%m.%Y") }}</td><td>{{ r.kwh|zahl(1) }}</td><td>{{ r.brutto|zahl(2) }} €</td><td>{{ r.faellig.strftime("%d.%m.%Y") }}</td></tr>
+{% else %}<tr><td colspan="5">Noch keine Rechnungen.</td></tr>{% endfor %}
+{% if rechnungen and t.rolle.value == "erzeuger" %}<tr><th colspan="3">Summe Einnahmen</th><th colspan="2">{{ rechnungen|sum(attribute="brutto")|zahl(2) }} €</th></tr>{% endif %}
+</table>
+{% endif %}
+
+{% if t.rolle.value == "erzeuger" %}
+<h2>Konto für Zahlungen</h2>
+<p class="klein">Ihre Abnehmer überweisen direkt auf dieses Konto. Die IBAN steht mit QR-Code auf jeder Rechnung.</p>
+{% if iban %}<p>Hinterlegt: <code>{{ iban }}</code></p>{% endif %}
+{% if iban_fehler %}<p class="fehler">Diese IBAN stimmt nicht. Bitte noch einmal prüfen.</p>{% endif %}
+<form method="post" action="/mein/{{ t.id }}/{{ token }}/iban"><label>IBAN</label><input name="iban" required placeholder="AT.. .... .... .... ...."><p><button>{{ "Ändern" if iban else "Speichern" }}</button></p></form>
+{% if einladung %}<h2>Nachbarn einladen</h2><p>Wer sich über diesen Link anmeldet, wird Ihnen zuerst zugeordnet:</p><p><code>{{ einladung }}</code></p>{% endif %}
+{% endif %}
+<p class="klein">Fragen? {{ dienstleister.email }}</p>
+{% endblock %}

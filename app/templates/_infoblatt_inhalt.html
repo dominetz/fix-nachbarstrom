@@ -1,0 +1,15 @@
+<h1>Informationsblatt zum Peer-to-Peer-Vertrag</h1>
+<p class="klein">Gruppe Nr. {{ g.id }} · Stand {{ heute.strftime("%d.%m.%Y") }} · Entwurf, vor dem ersten echten Einsatz juristisch prüfen lassen.</p>
+<table>
+<tr><th>Lieferant (Erzeuger)</th><td>{{ erzeuger.name }}, {{ erzeuger.plz }} {{ erzeuger.ort }}</td></tr>
+<tr><th>Abwicklung im Auftrag</th><td>{{ dienstleister.firma }}, {{ dienstleister.adresse }}, {{ dienstleister.email }}</td></tr>
+<tr><th>Was geliefert wird</th><td>Strom aus der PV-Anlage des Erzeugers ({{ erzeuger.anlage_kwp|zahl(1) }} kWp), nur soweit Erzeugung und Ihr Verbrauch in derselben Viertelstunde zusammenfallen. Den restlichen Strom liefert weiter Ihr bisheriger Lieferant.</td></tr>
+<tr><th>Herkunft</th><td>100 % Sonnenstrom aus Österreich</td></tr>
+<tr><th>Preis</th><td>{% if g.preis_ct_kwh > 0 %}{{ g.preis_ct_kwh|zahl(2) }} ct/kWh netto{% if g.ust_satz %} zuzüglich {{ (g.ust_satz*100)|zahl }} % USt{% endif %}{% else %}unentgeltlich{% endif %}. Keine Grundgebühr, keine Mindestmenge.{% if g.preis_neu_ab %} Angekündigt: {{ g.preis_neu_ct_kwh|zahl(2) }} ct/kWh ab {{ g.preis_neu_ab.strftime("%d.%m.%Y") }}.{% endif %}</td></tr>
+<tr><th>Netzentgelte</th><td>Verrechnet weiter der Netzbetreiber. Im Nahebereich gibt es ab 1.1.2027 einen Rabatt auf das Netznutzungsentgelt (Zone {{ g.zonelevel }}).</td></tr>
+<tr><th>Rechnung</th><td>{% if g.rechnung_monatlich %}Monatlich{% else %}Jährlich{% endif %}, kostenlos, auf Wunsch monatlich. Grundlage sind die Messdaten des Netzbetreibers.</td></tr>
+<tr><th>Zahlung</th><td>Überweisung innerhalb von {{ 14 }} Tagen auf das Konto des Erzeugers, QR-Code auf der Rechnung.</td></tr>
+<tr><th>Preisänderungen</th><td>Mindestens einen Monat vorher schriftlich, mit Begründung. Sie können widersprechen oder kostenlos kündigen.</td></tr>
+<tr><th>Laufzeit, Kündigung</th><td>Unbefristet, Kündigung jederzeit mit zwei Wochen Frist, ohne Kosten.</td></tr>
+<tr><th>Beschwerden</th><td>Zuerst an {{ dienstleister.email }}. Danach Schlichtungsstelle der E-Control, www.e-control.at.</td></tr>
+</table>

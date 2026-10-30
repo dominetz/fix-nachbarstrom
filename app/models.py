@@ -65,6 +65,7 @@ class Teilnehmer(SQLModel, table=True):
     profiltyp: Profiltyp = Profiltyp.HAUSHALT
     jahresverbrauch_kwh: float = 0  # Abnehmer, beim Erzeuger der Eigenverbrauch
     anlage_kwp: float = 0  # nur Erzeuger
+    iban: Optional[str] = None  # nur Erzeuger: Konto für die Zahlungen der Abnehmer
     einladung_von: Optional[int] = Field(default=None, foreign_key="teilnehmer.id")
     einwilligung_daten: bool = False
     einwilligung_zeit: Optional[datetime] = None
@@ -90,6 +91,8 @@ class Gruppe(SQLModel, table=True):
     status: GruppenStatus = GruppenStatus.VORSCHLAG
     zonelevel: int = 6  # 3 lokal (Trafo), 4 regional (Umspannwerk), 6 ohne Rabatt
     preis_ct_kwh: float = 0.0  # netto; 0 = Schenkung
+    preis_neu_ct_kwh: Optional[float] = None  # angekündigte Preisänderung
+    preis_neu_ab: Optional[date] = None  # frühestens ein Monat nach Ankündigung (§ 69 ElWG)
     ust_satz: float = 0.0  # 0.0 Kleinunternehmer, 0.20 sonst; mit Steuerberater klären
     rechnung_monatlich: bool = False  # sonst jährlich
     erwartete_kwh_jahr: float = 0.0
@@ -144,3 +147,15 @@ class Rechnung(SQLModel, table=True):
     brutto: float
     datum: date = Field(default_factory=date.today)
     faellig: date
+
+
+class Nachricht(SQLModel, table=True):
+    """Mail-Entwurf im Postausgang. Gesendet wird nur von Hand."""
+    id: Optional[int] = Field(default=None, primary_key=True)
+    teilnehmer_id: int = Field(foreign_key="teilnehmer.id")
+    gruppe_id: Optional[int] = Field(default=None, foreign_key="gruppe.id")
+    art: str  # willkommen, unterschrift, rechnung, preisaenderung, kuendigung
+    betreff: str
+    text: str
+    erstellt: datetime = Field(default_factory=jetzt)
+    gesendet_am: Optional[datetime] = None

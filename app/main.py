@@ -1,26 +1,27 @@
 """Fix Nachbarstrom: Web-Anwendung.
 
-Öffentlich: Anmeldung, Einladungslink, Unterschrift.
+Öffentlich: Anmeldung, Einladungslink, Unterschrift, persönlicher Bereich je Teilnehmer.
 Verwaltung (Passwort): Matching, Gruppen, Unterlagen für ebUtilities/EDA,
-Erinnerungen, Abrechnung.
+Erinnerungen, Postausgang, Preisänderung, Abrechnung.
 """
 import hashlib
 import hmac
 import secrets
 from contextlib import asynccontextmanager
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.templating import Jinja2Templates
+from sqlalchemy import inspect, text
 from sqlmodel import Session, SQLModel, create_engine, select
 
-from . import abrechnung, config, matching
+from . import abrechnung, config, matching, nachrichten, zahlung
 from .erinnerungen import faellige_erinnerungen
 from .models import (STATUS_TEXT, Einladung, Gruppe, GruppenStatus, Mitglied,
-                     Profiltyp, Rechnung, Rolle, Teilnehmer, Unterschrift,
+                     Nachricht, Profiltyp, Rechnung, Rolle, Teilnehmer, Unterschrift,
                      Zustimmung, jetzt)
 from .zaehlpunkt import ist_gueltig, maskiert, netzbetreiber_code, normalisieren
 
@@ -30,7 +31,22 @@ engine = create_engine(config.DATENBANK, connect_args={"check_same_thread": Fals
 @asynccontextmanager
 async def _lebenszyklus(_app):
     SQLModel.metadata.create_all(engine)
+    _spalten_ergaenzen()
     yield
+
+
+def _spalten_ergaenzen():
+    """Neue Felder in eine bestehende Datenbank übernehmen, ohne Daten zu verlieren."""
+    pruefer = inspect(engine)
+    for tabelle in SQLModel.metadata.sorted_tables:
+        if not pruefer.has_table(tabelle.name):
+            continue
+        vorhanden = {c["name"] for c in pruefer.get_columns(tabelle.name)}
+        for spalte in tabelle.columns:
+            if spalte.name not in vorhanden:
+                typ = spalte.type.compile(engine.dialect)
+                with engine.begin() as v:
+                    v.execute(text(f"ALTER TABLE {tabelle.name} ADD COLUMN {spalte.name} {typ}"))
 
 
 app = FastAPI(title=config.MARKE, lifespan=_lebenszyklus)
@@ -55,9 +71,31 @@ def verwaltung(cred: HTTPBasicCredentials = Depends(sicherheit)):
     return cred.username
 
 
+def _signatur(text: str) -> str:
+    return hmac.new(config.GEHEIMNIS.encode(), text.encode(), hashlib.sha256).hexdigest()[:24]
+
+
 def unterschrift_token(gruppe_id: int, teilnehmer_id: int) -> str:
-    nachricht = f"{gruppe_id}:{teilnehmer_id}".encode()
-    return hmac.new(config.GEHEIMNIS.encode(), nachricht, hashlib.sha256).hexdigest()[:24]
+    return _signatur(f"{gruppe_id}:{teilnehmer_id}")
+
+
+def kunden_token(teilnehmer_id: int) -> str:
+    return _signatur(f"kunde:{teilnehmer_id}")
+
+
+def kundenlink(teilnehmer_id: int) -> str:
+    return f"{config.BASIS_URL}/mein/{teilnehmer_id}/{kunden_token(teilnehmer_id)}"
+
+
+def unterschriftslink(gruppe_id: int, teilnehmer_id: int) -> str:
+    return f"{config.BASIS_URL}/unterschreiben/{gruppe_id}/{teilnehmer_id}/{unterschrift_token(gruppe_id, teilnehmer_id)}"
+
+
+def preis_fuer(g: Gruppe, tag: date) -> float:
+    """Preis, der an einem Tag gilt. Eine angekündigte Änderung gilt ab ihrem Stichtag."""
+    if g.preis_neu_ab and g.preis_neu_ct_kwh is not None and tag >= g.preis_neu_ab:
+        return g.preis_neu_ct_kwh
+    return g.preis_ct_kwh
 
 
 def _seite(request: Request, name: str, **daten):
@@ -128,7 +166,8 @@ def anmelden(request: Request, s: Session = Depends(sitzung),
     if e and not e.eingeloest_von:
         e.eingeloest_von = t.id
         s.add(e)
-        s.commit()
+    s.add(nachrichten.willkommen(t, kundenlink(t.id)))
+    s.commit()
     return RedirectResponse(f"/danke/{t.id}", status_code=303)
 
 
@@ -145,7 +184,7 @@ def danke(request: Request, tid: int, s: Session = Depends(sitzung)):
             s.add(e)
             s.commit()
         link = f"{config.BASIS_URL}/anmelden?einladung={e.token}"
-    return _seite(request, "danke.html", t=t, link=link)
+    return _seite(request, "danke.html", t=t, link=link, bereich=kundenlink(t.id))
 
 
 @app.get("/unterschreiben/{gid}/{tid}/{token}", response_class=HTMLResponse)
@@ -216,7 +255,18 @@ def uebersicht(request: Request, s: Session = Depends(sitzung), _=Depends(verwal
     teilnehmer = s.exec(select(Teilnehmer)).all()
     erinnerungen = _erinnerungen(s)
     zeilen = [(g, s.get(Teilnehmer, g.erzeuger_id)) for g in gruppen]
-    return _seite(request, "verwaltung.html", zeilen=zeilen, teilnehmer=teilnehmer,
+    aktiv = [g for g in gruppen if g.status == GruppenStatus.AKTIV]
+    rechnungen = s.exec(select(Rechnung)).all()
+    kennzahlen = {
+        "aktive_gruppen": len(aktiv),
+        "zaehlpunkte_aktiv": len(aktiv) + sum(len(s.exec(select(Mitglied).where(Mitglied.gruppe_id == g.id)).all())
+                                              for g in aktiv),
+        "kwh_erwartet": sum(g.erwartete_kwh_jahr for g in aktiv),
+        "kwh_abgerechnet": sum(r.kwh for r in rechnungen),
+        "umsatz_abgerechnet": sum(r.brutto for r in rechnungen),
+        "postausgang": len(s.exec(select(Nachricht).where(Nachricht.gesendet_am == None)).all()),  # noqa: E711
+    }
+    return _seite(request, "verwaltung.html", zeilen=zeilen, teilnehmer=teilnehmer, k=kennzahlen,
                   anzahl_erinnerungen=len(erinnerungen),
                   erzeuger=sum(1 for t in teilnehmer if t.rolle == Rolle.ERZEUGER),
                   abnehmer=sum(1 for t in teilnehmer if t.rolle == Rolle.ABNEHMER))
@@ -266,6 +316,8 @@ def gruppe_anlegen(s: Session = Depends(sitzung), _=Depends(verwaltung),
     s.refresh(g)
     for a in abnehmer:
         s.add(Mitglied(gruppe_id=g.id, teilnehmer_id=a.id, erwartete_kwh_jahr=round(menge[a.id])))
+    for t in [e] + abnehmer:
+        s.add(nachrichten.unterschrift(t, g.id, unterschriftslink(g.id, t.id)))
     s.commit()
     return RedirectResponse(f"/verwaltung/gruppe/{g.id}", status_code=303)
 
@@ -277,11 +329,13 @@ def gruppe_seite(request: Request, gid: int, s: Session = Depends(sitzung), _=De
     alle = [d["erzeuger"]] + [t for _, t in d["abnehmer"]]
     unterschriften = {u.teilnehmer_id for u in s.exec(select(Unterschrift).where(
         Unterschrift.gruppe_id == gid, Unterschrift.dokument == "vertrag")).all()}
-    links = {t.id: f"{config.BASIS_URL}/unterschreiben/{gid}/{t.id}/{unterschrift_token(gid, t.id)}" for t in alle}
+    links = {t.id: unterschriftslink(gid, t.id) for t in alle}
     zustimmungen = {z.teilnehmer_id: z for z in s.exec(select(Zustimmung).where(Zustimmung.gruppe_id == gid)).all()}
     rechnungen = s.exec(select(Rechnung).where(Rechnung.gruppe_id == gid).order_by(Rechnung.bis.desc())).all()
+    namen = {t.id: t.name for t in alle}
     return _seite(request, "gruppe.html", g=g, alle=alle, unterschriften=unterschriften, links=links,
-                  zustimmungen=zustimmungen, rechnungen=rechnungen, stati=list(GruppenStatus), **d)
+                  zustimmungen=zustimmungen, rechnungen=rechnungen, stati=list(GruppenStatus), namen=namen,
+                  frueheste_aenderung=date.today() + timedelta(days=31), **d)
 
 
 @app.post("/verwaltung/gruppe/{gid}")
@@ -292,6 +346,8 @@ def gruppe_aendern(gid: int, s: Session = Depends(sitzung), _=Depends(verwaltung
     g = s.get(Gruppe, gid) or _404()
     if status == GruppenStatus.REGISTRIERT and not (marktpartner_id.strip() and gemeinschafts_id.strip()):
         raise HTTPException(400, "Für „registriert“ bitte Marktpartner-ID und Gemeinschafts-ID eintragen.")
+    if preis_ct_kwh != g.preis_ct_kwh and g.status == GruppenStatus.AKTIV:
+        raise HTTPException(400, "In einer aktiven Gruppe ändert sich der Preis nur über „Preisänderung ankündigen“.")
     g.status, g.preis_ct_kwh, g.ust_satz = status, preis_ct_kwh, ust_satz
     g.rechnung_monatlich = rechnung_monatlich
     g.marktpartner_id = marktpartner_id.strip() or None
@@ -383,11 +439,16 @@ async def abrechnen(request: Request, gid: int, report: UploadFile, s: Session =
         if s.exec(select(Rechnung).where(Rechnung.nummer == nummer)).first():
             uebersprungen.append(f"{nummer} (gibt es schon)")
             continue
-        b = abrechnung.berechnen(z.kwh, g.preis_ct_kwh, g.ust_satz)
+        preis = preis_fuer(g, z.von)
+        b = abrechnung.berechnen(z.kwh, preis, g.ust_satz)
         heute = date.today()
-        s.add(Rechnung(nummer=nummer, gruppe_id=g.id, abnehmer_id=t.id, von=z.von, bis=z.bis, kwh=z.kwh,
-                       preis_ct_kwh=g.preis_ct_kwh, ust_satz=g.ust_satz, netto=b.netto, ust=b.ust,
-                       brutto=b.brutto, datum=heute, faellig=abrechnung.faelligkeit(heute)))
+        r = Rechnung(nummer=nummer, gruppe_id=g.id, abnehmer_id=t.id, von=z.von, bis=z.bis, kwh=z.kwh,
+                     preis_ct_kwh=preis, ust_satz=g.ust_satz, netto=b.netto, ust=b.ust,
+                     brutto=b.brutto, datum=heute, faellig=abrechnung.faelligkeit(heute))
+        s.add(r)
+        s.flush()
+        s.add(nachrichten.rechnung(t, g.id, nummer, _euro(b.brutto), r.faellig,
+                                   f"{kundenlink(t.id)}/rechnung/{r.id}"))
         neu += 1
     s.commit()
     return _seite(request, "abrechnung_ergebnis.html", g=g, neu=neu, uebersprungen=uebersprungen)
@@ -396,9 +457,152 @@ async def abrechnen(request: Request, gid: int, report: UploadFile, s: Session =
 @app.get("/verwaltung/rechnung/{rid}", response_class=HTMLResponse)
 def rechnung(request: Request, rid: int, s: Session = Depends(sitzung), _=Depends(verwaltung)):
     r = s.get(Rechnung, rid) or _404()
+    return _seite(request, "rechnung.html", **_rechnung_daten(s, r))
+
+
+def _rechnung_daten(s: Session, r: Rechnung) -> dict:
     g = s.get(Gruppe, r.gruppe_id)
-    return _seite(request, "rechnung.html", r=r, g=g, abnehmer=s.get(Teilnehmer, r.abnehmer_id),
-                  erzeuger=s.get(Teilnehmer, g.erzeuger_id))
+    erzeuger = s.get(Teilnehmer, g.erzeuger_id)
+    qr = None
+    if erzeuger.iban and r.brutto > 0:
+        qr = zahlung.qr_svg(erzeuger.name, erzeuger.iban, r.brutto, f"Rechnung {r.nummer}")
+    return {"r": r, "g": g, "abnehmer": s.get(Teilnehmer, r.abnehmer_id), "erzeuger": erzeuger, "qr": qr,
+            "iban": zahlung.iban_lesbar(erzeuger.iban) if erzeuger.iban else None}
+
+
+@app.get("/verwaltung/gruppe/{gid}/infoblatt", response_class=HTMLResponse)
+def infoblatt(request: Request, gid: int, s: Session = Depends(sitzung), _=Depends(verwaltung)):
+    g = s.get(Gruppe, gid) or _404()
+    return _seite(request, "infoblatt.html", g=g, **_gruppen_daten(s, g))
+
+
+@app.post("/verwaltung/gruppe/{gid}/preisaenderung")
+def preisaenderung(gid: int, s: Session = Depends(sitzung), _=Depends(verwaltung),
+                   neuer_preis: float = Form(...), ab: date = Form(...), grund: str = Form(...)):
+    """Preisänderung nach § 69 ElWG: mindestens einen Monat vorher, mit Begründung, an jeden Abnehmer."""
+    g = s.get(Gruppe, gid) or _404()
+    heute = date.today()
+    if ab < heute + timedelta(days=31):
+        raise HTTPException(400, "Eine Preisänderung muss mindestens einen Monat vorher angekündigt werden.")
+    if not grund.strip():
+        raise HTTPException(400, "Bitte einen Grund angeben, er steht in der Mitteilung.")
+    if g.preis_neu_ab and g.preis_neu_ab <= heute:  # frühere Änderung gilt schon
+        g.preis_ct_kwh = g.preis_neu_ct_kwh
+    alt = preis_fuer(g, heute)
+    g.preis_neu_ct_kwh, g.preis_neu_ab = neuer_preis, ab
+    s.add(g)
+    for _m, t in _gruppen_daten(s, g)["abnehmer"]:
+        s.add(nachrichten.preisaenderung(t, g.id, _euro(alt), _euro(neuer_preis), ab, grund.strip(),
+                                         kundenlink(t.id)))
+    s.commit()
+    return RedirectResponse("/verwaltung/postausgang", status_code=303)
+
+
+@app.get("/verwaltung/postausgang", response_class=HTMLResponse)
+def postausgang(request: Request, s: Session = Depends(sitzung), _=Depends(verwaltung)):
+    offen = s.exec(select(Nachricht).where(Nachricht.gesendet_am == None).order_by(Nachricht.erstellt)).all()  # noqa: E711
+    gesendet = s.exec(select(Nachricht).where(Nachricht.gesendet_am != None)  # noqa: E711
+                      .order_by(Nachricht.gesendet_am.desc()).limit(50)).all()
+    empfaenger = {n.teilnehmer_id: s.get(Teilnehmer, n.teilnehmer_id) for n in offen + gesendet}
+    links = {n.id: nachrichten.mailto(empfaenger[n.teilnehmer_id].email, n.betreff, n.text) for n in offen}
+    return _seite(request, "postausgang.html", offen=offen, gesendet=gesendet, empfaenger=empfaenger, links=links)
+
+
+@app.post("/verwaltung/postausgang/{nid}/gesendet")
+def nachricht_gesendet(nid: int, s: Session = Depends(sitzung), _=Depends(verwaltung)):
+    n = s.get(Nachricht, nid) or _404()
+    n.gesendet_am = n.gesendet_am or jetzt()
+    s.add(n)
+    s.commit()
+    return RedirectResponse("/verwaltung/postausgang", status_code=303)
+
+
+# ---------------------------------------------------------------- Kundenbereich
+
+def _kunde(s: Session, tid: int, token: str) -> Teilnehmer:
+    if not hmac.compare_digest(token, kunden_token(tid)):
+        raise HTTPException(404)
+    return s.get(Teilnehmer, tid) or _404()
+
+
+def _gruppe_von(s: Session, t: Teilnehmer) -> Gruppe | None:
+    if t.rolle == Rolle.ERZEUGER:
+        gruppen = s.exec(select(Gruppe).where(Gruppe.erzeuger_id == t.id)).all()
+    else:
+        ids = [m.gruppe_id for m in s.exec(select(Mitglied).where(Mitglied.teilnehmer_id == t.id)).all()]
+        gruppen = [s.get(Gruppe, i) for i in ids]
+    offen = [g for g in gruppen if g.status != GruppenStatus.BEENDET]
+    return max(offen or gruppen, key=lambda g: g.id, default=None)
+
+
+SCHRITTE = [GruppenStatus.VERTRAG_OFFEN, GruppenStatus.UNTERSCHRIEBEN, GruppenStatus.REGISTRIERT,
+            GruppenStatus.EDA_ANGEMELDET, GruppenStatus.AKTIV]
+
+
+@app.get("/mein/{tid}/{token}", response_class=HTMLResponse)
+def mein_bereich(request: Request, tid: int, token: str, s: Session = Depends(sitzung), iban_fehler: str = ""):
+    t = _kunde(s, tid, token)
+    g = _gruppe_von(s, t)
+    daten = {"t": t, "g": g, "token": token, "iban_fehler": iban_fehler, "rechnungen": [], "aufgaben": [],
+             "schritte": SCHRITTE, "erreicht": -1, "einladung": None, "partner": []}
+    if t.rolle == Rolle.ERZEUGER:
+        e = s.exec(select(Einladung).where(Einladung.erzeuger_id == t.id)).first()
+        daten["einladung"] = f"{config.BASIS_URL}/anmelden?einladung={e.token}" if e else None
+        daten["iban"] = zahlung.iban_lesbar(t.iban) if t.iban else None
+    if g:
+        d = _gruppen_daten(s, g)
+        daten["partner"] = [d["erzeuger"]] + [a for _, a in d["abnehmer"]]
+        daten["erreicht"] = SCHRITTE.index(g.status) if g.status in SCHRITTE else -1
+        daten["preis_heute"] = preis_fuer(g, date.today())
+        unterschrieben = s.exec(select(Unterschrift).where(Unterschrift.gruppe_id == g.id,
+                                                           Unterschrift.teilnehmer_id == t.id)).first()
+        if not unterschrieben and g.status != GruppenStatus.BEENDET:
+            daten["aufgaben"].append(("Vertrag und Vollmacht unterschreiben", unterschriftslink(g.id, t.id)))
+        z = s.exec(select(Zustimmung).where(Zustimmung.gruppe_id == g.id, Zustimmung.teilnehmer_id == t.id)).first()
+        if z and z.freigegeben_am and not z.erteilt_am:
+            frist = z.freigegeben_am + timedelta(days=config.ZUSTIMMUNG_FRIST_TAGE)
+            daten["aufgaben"].append((f"Im Kundenportal von Vorarlberg Netz zustimmen, bis {frist:%d.%m.%Y}", None))
+        if t.rolle == Rolle.ERZEUGER and g.preis_ct_kwh > 0 and not t.iban:
+            daten["aufgaben"].append(("Konto (IBAN) für die Zahlungen eintragen, siehe unten", None))
+        abfrage = select(Rechnung).where(Rechnung.gruppe_id == g.id)
+        if t.rolle == Rolle.ABNEHMER:
+            abfrage = abfrage.where(Rechnung.abnehmer_id == t.id)
+        daten["rechnungen"] = s.exec(abfrage.order_by(Rechnung.bis.desc())).all()
+    return _seite(request, "mein.html", **daten)
+
+
+@app.post("/mein/{tid}/{token}/iban")
+def mein_iban(tid: int, token: str, s: Session = Depends(sitzung), iban: str = Form(...)):
+    t = _kunde(s, tid, token)
+    if t.rolle != Rolle.ERZEUGER:
+        raise HTTPException(400)
+    if not zahlung.iban_gueltig(iban):
+        return RedirectResponse(f"/mein/{tid}/{token}?iban_fehler=1", status_code=303)
+    t.iban = zahlung.iban_normalisieren(iban)
+    s.add(t)
+    s.commit()
+    return RedirectResponse(f"/mein/{tid}/{token}", status_code=303)
+
+
+@app.get("/mein/{tid}/{token}/rechnung/{rid}", response_class=HTMLResponse)
+def mein_rechnung(request: Request, tid: int, token: str, rid: int, s: Session = Depends(sitzung)):
+    t = _kunde(s, tid, token)
+    r = s.get(Rechnung, rid) or _404()
+    g = s.get(Gruppe, r.gruppe_id)
+    if t.id not in (r.abnehmer_id, g.erzeuger_id):
+        raise HTTPException(404)
+    return _seite(request, "mein_rechnung.html", zurueck=f"/mein/{tid}/{token}", **_rechnung_daten(s, r))
+
+
+@app.get("/mein/{tid}/{token}/infoblatt", response_class=HTMLResponse)
+def mein_infoblatt(request: Request, tid: int, token: str, s: Session = Depends(sitzung)):
+    t = _kunde(s, tid, token)
+    g = _gruppe_von(s, t) or _404()
+    return _seite(request, "mein_infoblatt.html", g=g, zurueck=f"/mein/{tid}/{token}", **_gruppen_daten(s, g))
+
+
+def _euro(x: float) -> str:
+    return f"{x:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 
 def _404():

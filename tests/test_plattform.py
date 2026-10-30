@@ -193,3 +193,82 @@ def test_abnehmer_nur_einmal_vorgeschlagen(client):
     seite = c.get("/verwaltung/matching", auth=("admin", "test")).text
     assert seite.count('name="abnehmer_ids"') == 1
     assert "Warteliste" in seite
+
+
+def test_iban_und_qr():
+    from app import zahlung
+    assert zahlung.iban_gueltig("AT61 1904 3002 3457 3201")  # Beispiel-IBAN aus der Norm
+    assert not zahlung.iban_gueltig("AT61 1904 3002 3457 3202")
+    daten = zahlung.epc_daten("Anna Sonnig", "AT61 1904 3002 3457 3201", 12.5, "Rechnung NS-1")
+    assert daten.split("\n")[6:8] == ["AT611904300234573201", "EUR12.50"]
+    assert zahlung.qr_svg("A", "AT611904300234573201", 1, "x").startswith("<svg")
+
+
+def test_dienstleistung_kundenbereich_postausgang_preis(client):
+    c, engine = client
+    auth = ("admin", "test")
+    _anmelden(c, "erzeuger", 1, anlage_kwp=12, jahresverbrauch_kwh=3000, profiltyp="haushalt")
+    _anmelden(c, "abnehmer", 2)
+    post = c.get("/verwaltung/postausgang", auth=auth).text
+    assert post.count("Ihre Anmeldung ist da") == 2
+    bereich = re.search(r"http://localhost:8000(/mein/2/\w+)", post).group(1)
+    assert "Wir suchen gerade" in c.get(bereich).text
+    assert c.get("/mein/2/falsch").status_code == 404
+
+    r = c.post("/verwaltung/gruppe", data={"erzeuger_id": 1, "abnehmer_ids": "2"}, auth=auth, follow_redirects=False)
+    gid = int(r.headers["location"].rsplit("/", 1)[1])
+    seite = c.get(bereich).text
+    assert "Vertrag und Vollmacht unterschreiben" in seite and "Partner gefunden" in seite
+    assert c.get(f"{bereich}/infoblatt").status_code == 200
+    assert "Partner ist gefunden" in c.get("/verwaltung/postausgang", auth=auth).text
+
+    # Erzeuger hinterlegt IBAN im eigenen Bereich
+    erz = re.search(r"http://localhost:8000(/mein/1/\w+)", c.get("/verwaltung/postausgang", auth=auth).text).group(1)
+    c.post(f"{erz}/iban", data={"iban": "AT61 1904 3002 3457 3202"})
+    assert "stimmt nicht" in c.get(f"{erz}?iban_fehler=1").text
+    c.post(f"{erz}/iban", data={"iban": "AT61 1904 3002 3457 3201"})
+    assert "AT61 1904" in c.get(erz).text
+
+    c.post(f"/verwaltung/gruppe/{gid}", auth=auth, data={"status": "aktiv", "preis_ct_kwh": 10, "ust_satz": 0})
+    # Preis in aktiver Gruppe nur per Ankündigung
+    assert c.post(f"/verwaltung/gruppe/{gid}", auth=auth,
+                  data={"status": "aktiv", "preis_ct_kwh": 12, "ust_satz": 0}).status_code == 400
+    zu_frueh = (date.today() + timedelta(days=10)).isoformat()
+    assert c.post(f"/verwaltung/gruppe/{gid}/preisaenderung", auth=auth,
+                  data={"neuer_preis": 12, "ab": zu_frueh, "grund": "x"}).status_code == 400
+    ab = date.today() + timedelta(days=40)
+    c.post(f"/verwaltung/gruppe/{gid}/preisaenderung", auth=auth,
+           data={"neuer_preis": 12, "ab": ab.isoformat(), "grund": "Höhere Kosten"})
+    assert "Neuer Preis ab" in c.get("/verwaltung/postausgang", auth=auth).text
+
+    # Abrechnung vor und nach dem Stichtag
+    csv = (f"zaehlpunkt;von;bis;kwh\n{zp(2)};{date.today()};{date.today()};100\n"
+           f"{zp(2)};{ab};{ab + timedelta(days=40)};100\n")
+    c.post(f"/verwaltung/gruppe/{gid}/abrechnung", auth=auth, files={"report": ("r.csv", csv, "text/csv")})
+    with Session(engine) as s:
+        rechnungen = s.exec(select(Rechnung).order_by(Rechnung.bis)).all()
+    assert [r.brutto for r in rechnungen] == [10.0, 12.0]
+    seite = c.get(bereich).text
+    assert rechnungen[0].nummer in seite
+    rechnung = c.get(f"{bereich}/rechnung/{rechnungen[0].id}").text
+    assert "<svg" in rechnung and "AT61 1904" in rechnung
+    assert c.get(f"{erz}/rechnung/{rechnungen[0].id}").status_code == 200
+    assert "Summe Einnahmen" in c.get(erz).text
+
+    # Als gesendet markieren leert den Postausgang
+    with Session(engine) as s:
+        offen = s.exec(select(main.Nachricht)).all()
+    for n in offen:
+        c.post(f"/verwaltung/postausgang/{n.id}/gesendet", auth=auth)
+    assert "Nichts offen" in c.get("/verwaltung/postausgang", auth=auth).text
+    assert "aktive Gruppen" in c.get("/verwaltung", auth=auth).text
+
+
+def test_neue_spalten_in_alter_datenbank(monkeypatch, tmp_path):
+    from sqlalchemy import inspect, text
+    alt = create_engine(f"sqlite:///{tmp_path / 'alt.db'}")
+    with alt.begin() as v:
+        v.execute(text("CREATE TABLE teilnehmer (id INTEGER PRIMARY KEY, vorname VARCHAR)"))
+    monkeypatch.setattr(main, "engine", alt)
+    main._spalten_ergaenzen()
+    assert "iban" in {c["name"] for c in inspect(alt).get_columns("teilnehmer")}

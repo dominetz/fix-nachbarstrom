@@ -2,12 +2,12 @@
 {% block inhalt %}
 <h1>Gruppe {{ g.id }}: {{ erzeuger.name }}</h1>
 <p>Status: <b>{{ status_text[g.status] }}</b> · Zone {{ g.zonelevel }} · erwartet {{ g.erwartete_kwh_jahr|zahl }} kWh/Jahr</p>
-<p class="nicht-drucken"><a class="knopf zweit" href="/verwaltung/gruppe/{{ g.id }}/vertrag">Vertrag</a> <a class="knopf zweit" href="/verwaltung/gruppe/{{ g.id }}/vollmacht">Vollmacht</a> <a class="knopf zweit" href="/verwaltung/gruppe/{{ g.id }}/anmeldung">Daten für ebUtilities und EDA</a></p>
+<p class="nicht-drucken"><a class="knopf zweit" href="/verwaltung/gruppe/{{ g.id }}/vertrag">Vertrag</a> <a class="knopf zweit" href="/verwaltung/gruppe/{{ g.id }}/vollmacht">Vollmacht</a> <a class="knopf zweit" href="/verwaltung/gruppe/{{ g.id }}/anmeldung">Daten für ebUtilities und EDA</a> <a class="knopf zweit" href="/verwaltung/gruppe/{{ g.id }}/infoblatt">Informationsblatt</a></p>
 
 <h2>Teilnehmer, Unterschrift und Zustimmung im Netzportal</h2>
 <table><tr><th>Name</th><th>Unterschrift</th><th>Link zum Unterschreiben</th><th>Netzportal</th></tr>
 {% for t in alle %}{% set z = zustimmungen.get(t.id) %}<tr>
-<td>{{ t.name }}<br><span class="klein">{{ t.rolle.value }}</span></td>
+<td>{{ t.name }}<br><span class="klein">{{ t.rolle.value }}{% if t.rolle.value == "erzeuger" %} · IBAN {{ "✓" if t.iban else "fehlt" }}{% endif %}</span></td>
 <td>{{ "✓" if t.id in unterschriften else "offen" }}</td>
 <td><code class="klein">{{ links[t.id] }}</code></td>
 <td><form method="post" action="/verwaltung/gruppe/{{ g.id }}/zustimmung"><input type="hidden" name="teilnehmer_id" value="{{ t.id }}">
@@ -32,12 +32,24 @@
 <p><button>Speichern</button></p>
 </form>
 
+<h2>Preisänderung ankündigen</h2>
+{% if g.preis_neu_ab %}<p class="hinweis">Angekündigt: {{ g.preis_neu_ct_kwh|zahl(2) }} ct/kWh ab {{ g.preis_neu_ab.strftime("%d.%m.%Y") }}.</p>{% endif %}
+<form method="post" action="/verwaltung/gruppe/{{ g.id }}/preisaenderung">
+<p class="klein">§ 69 ElWG: mindestens einen Monat vorher, mit Begründung, jeder Abnehmer bekommt eine Mitteilung (landet im Postausgang).</p>
+<div class="raster">
+<div><label>Neuer Preis ct/kWh netto</label><input type="number" step="0.01" name="neuer_preis" required></div>
+<div><label>Gültig ab (frühestens {{ frueheste_aenderung.strftime("%d.%m.%Y") }})</label><input type="date" name="ab" min="{{ frueheste_aenderung }}" required></div>
+</div>
+<label>Grund</label><input name="grund" required>
+<p><button class="zweit">Ankündigen</button></p>
+</form>
+
 <h2>Abrechnung</h2>
 <form method="post" action="/verwaltung/gruppe/{{ g.id }}/abrechnung" enctype="multipart/form-data">
 <p class="klein">CSV aus dem EDA-Energiedatenreport mit den Spalten <code>zaehlpunkt;von;bis;kwh</code> (geteilte kWh je Abnehmer).</p>
 <input type="file" name="report" accept=".csv" required> <button>Rechnungen erstellen</button>
 </form>
 <table><tr><th>Nummer</th><th>Abnehmer</th><th>Zeitraum</th><th>kWh</th><th>Brutto</th></tr>
-{% for r in rechnungen %}<tr><td><a href="/verwaltung/rechnung/{{ r.id }}">{{ r.nummer }}</a></td><td>{{ r.abnehmer_id }}</td><td>{{ r.von.strftime("%d.%m.%Y") }} – {{ r.bis.strftime("%d.%m.%Y") }}</td><td>{{ r.kwh|zahl(1) }}</td><td>{{ r.brutto|zahl(2) }} €</td></tr>
+{% for r in rechnungen %}<tr><td><a href="/verwaltung/rechnung/{{ r.id }}">{{ r.nummer }}</a></td><td>{{ namen.get(r.abnehmer_id, r.abnehmer_id) }}</td><td>{{ r.von.strftime("%d.%m.%Y") }} – {{ r.bis.strftime("%d.%m.%Y") }}</td><td>{{ r.kwh|zahl(1) }}</td><td>{{ r.brutto|zahl(2) }} €</td></tr>
 {% else %}<tr><td colspan="5">Noch keine Rechnungen.</td></tr>{% endfor %}</table>
 {% endblock %}
