@@ -1,5 +1,7 @@
 """Einstellungen. Alles über Umgebungsvariablen änderbar, nichts Geheimes im Code."""
 import os
+import secrets
+from pathlib import Path
 
 DATENBANK = os.environ.get("NACHBARSTROM_DB", "sqlite:///nachbarstrom.db")
 ADMIN_BENUTZER = os.environ.get("NACHBARSTROM_ADMIN_USER", "admin")
@@ -21,5 +23,18 @@ ERINNERUNG_NACH_TAGEN = (2, 5)  # nach Freigabe, danach kurz vor Fristende
 
 ZAHLUNGSZIEL_TAGE = 14
 
-# Schlüssel für Unterschrifts-Links. In Betrieb unbedingt setzen.
-GEHEIMNIS = os.environ.get("NACHBARSTROM_SECRET", "nur-fuer-entwicklung")
+# Schlüssel für die persönlichen Links (Unterschrift, Kundenbereich). Wird beim ersten
+# Start zufällig erzeugt und in einer Datei aufgehoben, damit verschickte Links
+# auch nach einem Neustart gültig bleiben.
+GEHEIMNIS_DATEI = Path(os.environ.get("NACHBARSTROM_SECRET_FILE", "nachbarstrom.geheimnis"))
+
+
+def _geheimnis() -> str:
+    if os.environ.get("NACHBARSTROM_SECRET"):
+        return os.environ["NACHBARSTROM_SECRET"]
+    if not GEHEIMNIS_DATEI.exists():
+        GEHEIMNIS_DATEI.write_text(secrets.token_hex(32), encoding="utf-8")
+    return GEHEIMNIS_DATEI.read_text(encoding="utf-8").strip()
+
+
+GEHEIMNIS = _geheimnis()

@@ -24,14 +24,14 @@ def willkommen(t: Teilnehmer, kundenlink: str) -> Nachricht:
                           f"Ihr persönlicher Bereich, dort sehen Sie jederzeit den Stand:\n{kundenlink}{GRUSS}")
 
 
-def unterschrift(t: Teilnehmer, gruppe_id: int, link: str) -> Nachricht:
+def unterschrift(t: Teilnehmer, gruppe_id: int, link: str, kundenlink: str) -> Nachricht:
     return Nachricht(teilnehmer_id=t.id, gruppe_id=gruppe_id, art="unterschrift",
                      betreff=f"{MARKE}: Ihr Partner ist gefunden, bitte unterschreiben",
                      text=f"Hallo {t.vorname},\n\nwir haben eine passende Gruppe für Sie gefunden. "
                           f"Bitte lesen und unterschreiben Sie Vertrag und Vollmacht online, das dauert "
                           f"etwa fünf Minuten:\n{link}\n\nDanach melden wir alles beim Netzbetreiber an. "
                           f"Sie bekommen dann eine Mail von Vorarlberg Netz und bestätigen einmal im "
-                          f"Kundenportal.{GRUSS}")
+                          f"Kundenportal.\n\nDen Stand sehen Sie jederzeit in Ihrem Bereich:\n{kundenlink}{GRUSS}")
 
 
 def rechnung(t: Teilnehmer, gruppe_id: int, nummer: str, brutto: str, faellig: date, link: str) -> Nachricht:

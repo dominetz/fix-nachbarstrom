@@ -28,9 +28,6 @@ if (-not (Test-Path "nachbarstrom.db")) {
 $sicher = Read-Host "Passwort fuer die Verwaltung festlegen (Benutzer: admin)" -AsSecureString
 $env:NACHBARSTROM_ADMIN_PASSWORD = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
     [Runtime.InteropServices.Marshal]::SecureStringToBSTR($sicher))
-if (-not $env:NACHBARSTROM_SECRET) {
-    $env:NACHBARSTROM_SECRET = [guid]::NewGuid().ToString() + [guid]::NewGuid().ToString()
-}
 
 Write-Host ""
 Write-Host "Fix Nachbarstrom laeuft auf http://localhost:8000" -ForegroundColor Green

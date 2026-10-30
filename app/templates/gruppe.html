@@ -7,7 +7,7 @@
 <h2>Teilnehmer, Unterschrift und Zustimmung im Netzportal</h2>
 <table><tr><th>Name</th><th>Unterschrift</th><th>Link zum Unterschreiben</th><th>Netzportal</th></tr>
 {% for t in alle %}{% set z = zustimmungen.get(t.id) %}<tr>
-<td>{{ t.name }}<br><span class="klein">{{ t.rolle.value }}{% if t.rolle.value == "erzeuger" %} · IBAN {{ "✓" if t.iban else "fehlt" }}{% endif %}</span></td>
+<td><a href="{{ bereiche[t.id] }}">{{ t.name }}</a><br><span class="klein">{{ t.rolle.value }}{% if t.rolle.value == "erzeuger" %} · IBAN {{ "✓" if t.iban else "fehlt" }}{% endif %}</span></td>
 <td>{{ "✓" if t.id in unterschriften else "offen" }}</td>
 <td><code class="klein">{{ links[t.id] }}</code></td>
 <td><form method="post" action="/verwaltung/gruppe/{{ g.id }}/zustimmung"><input type="hidden" name="teilnehmer_id" value="{{ t.id }}">

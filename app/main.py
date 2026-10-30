@@ -317,7 +317,7 @@ def gruppe_anlegen(s: Session = Depends(sitzung), _=Depends(verwaltung),
     for a in abnehmer:
         s.add(Mitglied(gruppe_id=g.id, teilnehmer_id=a.id, erwartete_kwh_jahr=round(menge[a.id])))
     for t in [e] + abnehmer:
-        s.add(nachrichten.unterschrift(t, g.id, unterschriftslink(g.id, t.id)))
+        s.add(nachrichten.unterschrift(t, g.id, unterschriftslink(g.id, t.id), kundenlink(t.id)))
     s.commit()
     return RedirectResponse(f"/verwaltung/gruppe/{g.id}", status_code=303)
 
@@ -330,11 +330,13 @@ def gruppe_seite(request: Request, gid: int, s: Session = Depends(sitzung), _=De
     unterschriften = {u.teilnehmer_id for u in s.exec(select(Unterschrift).where(
         Unterschrift.gruppe_id == gid, Unterschrift.dokument == "vertrag")).all()}
     links = {t.id: unterschriftslink(gid, t.id) for t in alle}
+    bereiche = {t.id: kundenlink(t.id) for t in alle}
     zustimmungen = {z.teilnehmer_id: z for z in s.exec(select(Zustimmung).where(Zustimmung.gruppe_id == gid)).all()}
     rechnungen = s.exec(select(Rechnung).where(Rechnung.gruppe_id == gid).order_by(Rechnung.bis.desc())).all()
     namen = {t.id: t.name for t in alle}
     return _seite(request, "gruppe.html", g=g, alle=alle, unterschriften=unterschriften, links=links,
                   zustimmungen=zustimmungen, rechnungen=rechnungen, stati=list(GruppenStatus), namen=namen,
+                  bereiche=bereiche,
                   frueheste_aenderung=date.today() + timedelta(days=31), **d)
 
 

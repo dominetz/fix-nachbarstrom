@@ -272,3 +272,11 @@ def test_neue_spalten_in_alter_datenbank(monkeypatch, tmp_path):
     monkeypatch.setattr(main, "engine", alt)
     main._spalten_ergaenzen()
     assert "iban" in {c["name"] for c in inspect(alt).get_columns("teilnehmer")}
+
+
+def test_geheimnis_bleibt_nach_neustart(monkeypatch, tmp_path):
+    from app import config
+    monkeypatch.delenv("NACHBARSTROM_SECRET", raising=False)
+    monkeypatch.setattr(config, "GEHEIMNIS_DATEI", tmp_path / "g")
+    erster = config._geheimnis()
+    assert len(erster) == 64 and config._geheimnis() == erster

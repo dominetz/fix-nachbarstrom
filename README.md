@@ -34,7 +34,7 @@ Doppelklick auf `Nachbarstrom starten.bat`. Beim ersten Start wird alles eingeri
 python -m venv .venv && . .venv/bin/activate
 pip install -r requirements.txt
 export NACHBARSTROM_ADMIN_PASSWORD='…'   # ohne Passwort ist die Verwaltung gesperrt
-export NACHBARSTROM_SECRET='…'           # langer Zufallswert für die Unterschrifts-Links
+export NACHBARSTROM_SECRET='…'           # optional; sonst wird beim ersten Start nachbarstrom.geheimnis angelegt
 python demo_daten.py                     # optional: erfundene Beispieldaten
 uvicorn app.main:app --port 8000
 ```
