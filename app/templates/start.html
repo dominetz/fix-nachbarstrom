@@ -1,10 +1,14 @@
 {% extends "basis.html" %}
 {% block inhalt %}
-<h1>Sonnenstrom vom Nachbarn</h1>
-<p>Seit 1. Oktober 2026 dürfen Sie Strom aus Ihrer PV-Anlage direkt an Nachbarn, Familie oder Betriebe in Ihrer Nähe verkaufen oder verschenken. Wir bringen die Partner zusammen und erledigen Vertrag, Anmeldung und Abrechnung.</p>
+<h1>Sonnenstrom teilen, ohne Papierkram</h1>
+<p class="unter">Seit 1. Oktober 2026 darf Strom aus PV-Anlagen direkt mit Nachbarn geteilt werden. Wir von {{ dienstleister.firma }} bringen die Partner zusammen, erstellen die Verträge, melden alles beim Netzbetreiber an und rechnen ab.</p>
+<h2>Strom mit Nachbarn teilen (Peer-to-Peer)</h2>
 <div class="raster">
- <div class="karte"><h2>Ich habe eine PV-Anlage</h2><p>Verkaufen Sie Ihren Überschuss an Nachbarn statt nur ins Netz.</p><a class="knopf" href="/anmelden?rolle=erzeuger">Als Erzeuger anmelden</a></div>
- <div class="karte"><h2>Ich möchte Strom beziehen</h2><p>Regionaler Sonnenstrom, auch ohne eigenes Dach. Ihr Stromvertrag bleibt.</p><a class="knopf" href="/anmelden?rolle=abnehmer">Als Abnehmer anmelden</a></div>
+ <div class="karte"><h2>Ich habe eine PV-Anlage</h2><p>Verkaufen Sie Ihren Überschuss an Nachbarn statt nur ins Netz. Sie kennen schon jemanden? Nach der Anmeldung bekommen Sie einen Einladungslink. Sonst suchen wir passende Abnehmer in Ihrer Nähe.</p><a class="knopf" href="/anmelden?rolle=erzeuger">Als Erzeuger anmelden</a></div>
+ <div class="karte"><h2>Ich möchte Strom beziehen</h2><p>Regionaler Sonnenstrom, auch ohne eigenes Dach. Ihr Stromvertrag bleibt. Wir finden eine PV-Anlage in der Nähe, deren Überschuss zu Ihrem Verbrauch passt, oder Sie laden Ihren Wunschnachbarn ein.</p><a class="knopf" href="/anmelden?rolle=abnehmer">Als Abnehmer anmelden</a></div>
 </div>
-<div class="hinweis">Sie brauchen einen Smart Meter mit Viertelstundenwerten und ein Konto im Kundenportal Ihres Netzbetreibers. Alle Teilnehmer müssen derzeit beim selben Netzbetreiber sein.</div>
+<h2>PV-Anlage im Mehrparteienhaus (GEA)</h2>
+<div class="karte"><p>Mit einer gemeinschaftlichen Erzeugungsanlage nutzen die Wohnungen eines Hauses den Strom vom eigenen Dach. Sie registrieren die Anlage über ebUtilities, laden jeden Monat den Export aus dem EDA-Portal hoch und sehen sofort, wie viel Sonnenstrom jede Wohnung genutzt hat. Auf Wunsch übernehmen wir auch die Abrechnung.</p>
+<a class="knopf" href="/gea">Mehr zur GEA und Anfrage</a></div>
+<div class="hinweis">Für das Teilen brauchen alle einen Smart Meter mit Viertelstundenwerten und ein Konto im Kundenportal des Netzbetreibers. Fragen? <a href="/anfrage">Schreiben Sie uns</a>.</div>
 {% endblock %}

@@ -80,5 +80,12 @@ def faelligkeit(rechnungsdatum: date) -> date:
     return rechnungsdatum + timedelta(days=ZAHLUNGSZIEL_TAGE)
 
 
+def preis_fuer(g, tag: date) -> float:
+    """Preis einer Gruppe, der an einem Tag gilt. Eine angekündigte Änderung gilt ab ihrem Stichtag."""
+    if g.preis_neu_ab and g.preis_neu_ct_kwh is not None and tag >= g.preis_neu_ab:
+        return g.preis_neu_ct_kwh
+    return g.preis_ct_kwh
+
+
 def rechnungsnummer(gruppe_id: int, abnehmer_id: int, bis: date) -> str:
     return f"NS-{gruppe_id:04d}-{abnehmer_id:05d}-{bis:%Y%m}"

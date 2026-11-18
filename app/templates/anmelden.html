@@ -1,7 +1,7 @@
 {% extends "basis.html" %}
 {% block inhalt %}
 <h1>{% if rolle.value == "erzeuger" %}Als Erzeuger anmelden{% else %}Als Abnehmer anmelden{% endif %}</h1>
-{% if erzeuger %}<div class="hinweis">Sie wurden von {{ erzeuger.vorname }} eingeladen. Nach der Anmeldung prüfen wir, ob Sie Strom teilen können.</div>{% endif %}
+{% if erzeuger %}<div class="hinweis">Sie wurden von {{ erzeuger.vorname }} eingeladen. Nach der Anmeldung prüfen wir, ob Sie gemeinsam Strom teilen können.</div>{% endif %}
 {% if fehler %}<div class="fehler">{% for f in fehler %}<div>{{ f }}</div>{% endfor %}</div>{% endif %}
 <form method="post" action="/anmelden">
 <input type="hidden" name="rolle" value="{{ rolle.value }}"><input type="hidden" name="einladung" value="{{ einladung or '' }}">
@@ -44,6 +44,9 @@
 <option value="eauto">Haushalt mit E-Auto, lädt tagsüber zu Hause</option>
 <option value="gewerbe">Betrieb, Büro oder Praxis (Mo–Fr)</option>
 </select>
+{% if not erzeuger %}<label>Haben Sie schon einen Wunschpartner? (optional)</label>
+<input name="wunschpartner" placeholder="z. B. Name und Adresse Ihres Nachbarn" value="{{ werte.wunschpartner or '' }}">
+<p class="klein">Dann versuchen wir zuerst, Sie beide zusammenzubringen. Nach der Anmeldung bekommen Sie außerdem einen Einladungslink, den Sie weitergeben können. Ohne Wunschpartner suchen wir passende Partner in Ihrer Nähe, deren Erzeugung und Verbrauch zusammenpassen.</p>{% endif %}
 <label><input type="checkbox" name="einwilligung" value="true"> Ich willige ein, dass {{ dienstleister.firma }} meine Angaben und Viertelstundenwerte nutzt, um passende Partner zu finden. Partner sehen vor Vertragsabschluss nur Ortsteil und erwartete Menge, nicht meinen Namen. Ich kann die Einwilligung jederzeit widerrufen.</label>
 <p><button>Anmelden</button></p>
 </form>

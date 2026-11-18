@@ -4,8 +4,8 @@
 {% block markenlink %}/mein/{{ t.id }}/{{ token }}{% endblock %}
 {% block inhalt %}
 {% set erz = t.rolle.value == "erzeuger" %}
-<h1>Hallo {{ t.vorname }}!</h1>
-<p class="unter">Ihr Bereich als {{ "Erzeuger" if erz else "Abnehmer" }} · Zählpunkt <code>{{ maskiert(t.zaehlpunkt) }}</code></p>
+<h1>Hallo{% if t.vorname %} {{ t.vorname }}{% endif %}!</h1>
+<p class="unter">{% if gea %}Ihre Wohnung in der GEA „{{ g.titel }}“{% else %}Ihr Bereich als {{ "Erzeuger" if erz else "Abnehmer" }}{% endif %} · Zählpunkt <code>{{ maskiert(t.zaehlpunkt) }}</code></p>
 
 {% if aufgaben %}<div class="karte" style="border-color:#f0d9a0;background:var(--gelb-hell)"><h2>Zu erledigen</h2><ul class="aufgaben">
 {% for text, link in aufgaben %}<li><span>{{ text }}</span>{% if link %}<a class="knopf klein-knopf" href="{{ link }}">Jetzt erledigen</a>{% endif %}</li>{% endfor %}</ul></div>{% endif %}
@@ -25,7 +25,7 @@
 <div class="kpi"><div class="wert">{{ ((a.einspeisung - a.rest) / a.einspeisung * 100 if a.einspeisung else 0)|zahl }} <small>%</small></div><div class="label">Ihres Überschusses ging an Nachbarn</div></div>
 <div class="kpi"><div class="wert">{{ (rechnungen|sum(attribute="brutto"))|zahl(2) }} <small>€</small></div><div class="label">abgerechnet (alle Rechnungen)</div></div>
 {% else %}
-<div class="kpi"><div class="wert">{{ a.geteilt|zahl }} <small>kWh</small></div><div class="label">Sonnenstrom vom Nachbarn (12 Monate)</div></div>
+<div class="kpi"><div class="wert">{{ a.geteilt|zahl }} <small>kWh</small></div><div class="label">Sonnenstrom {{ "vom eigenen Dach" if gea else "vom Nachbarn" }} (12 Monate)</div></div>
 <div class="kpi"><div class="wert">{{ (a.geteilt / a.verbrauch * 100 if a.verbrauch else 0)|zahl }} <small>%</small></div><div class="label">Ihres Verbrauchs</div></div>
 <div class="kpi"><div class="wert">{{ a.verbrauch|zahl }} <small>kWh</small></div><div class="label">Gesamtverbrauch (12 Monate)</div></div>
 {% endif %}
@@ -35,10 +35,11 @@
 {% endif %}
 
 <div class="zwei">
-<div class="karte"><h2>Ihre Gruppe</h2>
-<ul class="aufgaben">{% for p in partner %}<li><span>{{ p.vorname }}{% if p.id == t.id %} (Sie){% endif %}</span><span class="klein">{{ "Erzeuger" if p.rolle.value == "erzeuger" else "Abnehmer" }}, {{ p.ort }}</span></li>{% endfor %}</ul>
+<div class="karte"><h2>{{ "Ihre GEA" if gea else "Ihre Gruppe" }}</h2>
+{% if gea %}<p>{{ partner|length - 1 }} Wohnungen teilen sich den Strom der PV-Anlage im Haus. Betreiber: {{ partner[0].name }}.</p>{% else %}
+<ul class="aufgaben">{% for p in partner %}<li><span>{{ p.vorname }}{% if p.id == t.id %} (Sie){% endif %}</span><span class="klein">{{ "Erzeuger" if p.rolle.value == "erzeuger" else "Abnehmer" }}, {{ p.ort }}</span></li>{% endfor %}</ul>{% endif %}
 <p>Preis: {% if preis_heute > 0 %}<b>{{ preis_heute|zahl(2) }} ct/kWh</b> netto{% else %}unentgeltlich{% endif %}{% if g.preis_neu_ab %}<br><span class="klein">ab {{ g.preis_neu_ab.strftime("%d.%m.%Y") }}: {{ g.preis_neu_ct_kwh|zahl(2) }} ct/kWh</span>{% endif %}</p>
-<p><a class="knopf zweit" href="/mein/{{ t.id }}/{{ token }}/infoblatt">Informationsblatt</a></p></div>
+{% if not gea %}<p><a class="knopf zweit" href="/mein/{{ t.id }}/{{ token }}/infoblatt">Informationsblatt</a></p>{% endif %}</div>
 
 <div class="karte"><h2>{{ "Einnahmen je Jahr" if erz else "Kosten je Jahr" }}</h2>
 <table><tr><th>Jahr</th><th class="zahl">kWh</th><th class="zahl">Betrag</th><th class="zahl">{{ "eingegangen" if erz else "bezahlt" }}</th></tr>
@@ -60,8 +61,8 @@
 {% if iban %}<p>Hinterlegt: <code>{{ iban }}</code></p>{% endif %}
 {% if iban_fehler %}<p class="fehler">Diese IBAN stimmt nicht. Bitte noch einmal prüfen.</p>{% endif %}
 <form method="post" action="/mein/{{ t.id }}/{{ token }}/iban" class="zeile"><div><input name="iban" required placeholder="AT.. .... .... .... ...."></div><button>{{ "Ändern" if iban else "Speichern" }}</button></form></div>
-{% if einladung %}<div class="karte"><h2>Nachbarn einladen</h2><p>Wer sich über diesen Link anmeldet, wird Ihnen zuerst zugeordnet:</p><p><code>{{ einladung }}</code></p></div>{% endif %}
 </div>
 {% endif %}
+{% if einladung %}<div class="karte"><h2>{{ "Nachbarn einladen" if erz else "Nachbarn mit PV-Anlage einladen" }}</h2><p>Sie kennen schon jemanden, mit dem Sie Strom teilen möchten? Schicken Sie diesen Link. Wer sich darüber anmeldet, wird Ihnen zuerst zugeordnet:</p><p><code>{{ einladung }}</code></p></div>{% endif %}
 <p class="klein">Fragen? {{ dienstleister.email }}</p>
 {% endblock %}

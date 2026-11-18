@@ -1,0 +1,12 @@
+<p><b>{{ dienstleister.firma }}</b><br>{{ dienstleister.adresse }}<br>{{ dienstleister.fn }} · UID {{ dienstleister.uid }}<br>{{ dienstleister.email }}</p>
+<p>An: {{ empfaenger.name }}<br>{{ empfaenger.strasse }}<br>{{ empfaenger.plz }} {{ empfaenger.ort }}</p>
+<h1>Rechnung {{ x.nummer }}</h1>
+<p>Rechnungsdatum: {{ x.datum.strftime("%d.%m.%Y") }} · Leistungszeitraum: {{ x.von.strftime("%d.%m.%Y") }} bis {{ x.bis.strftime("%d.%m.%Y") }}</p>
+<p>{% if g.art.value == "gea" %}Gemeinschaftliche Erzeugungsanlage „{{ g.titel }}“{% else %}Peer-to-Peer-Gruppe {{ g.id }}{% endif %}{% if g.gemeinschafts_id %}, Gemeinschafts-ID {{ g.gemeinschafts_id }}{% endif %}</p>
+<table><tr><th>Leistung</th><th>Menge</th><th>Preis</th><th>Betrag</th></tr>
+<tr><td>Servicegebühr {{ "Auswertung und Abwicklung" if g.art.value == "gea" else "Vermittlung, Anmeldung und Abrechnung" }}, je geteilter kWh</td><td>{{ x.kwh|zahl(1) }} kWh</td><td>{{ x.ct_kwh|zahl(2) }} ct/kWh</td><td>{{ x.netto|zahl(2) }} €</td></tr>
+<tr><td colspan="3">Umsatzsteuer {{ (x.ust_satz*100)|zahl }} %</td><td>{{ x.ust|zahl(2) }} €</td></tr>
+<tr><th colspan="3">Gesamtbetrag</th><th>{{ x.brutto|zahl(2) }} €</th></tr></table>
+<p class="klein">Geteilte Menge = Summe der „Eigendeckung gemeinschaftlicher Erzeugung“ aller {{ "Wohnungen" if g.art.value == "gea" else "Abnehmer" }} im Zeitraum laut EDA-Energiedaten.</p>
+<p>Fällig bis {{ x.faellig.strftime("%d.%m.%Y") }}.{% if iban %} Bitte überweisen Sie auf <b>{{ dienstleister.firma }}</b>, IBAN <code style="white-space:nowrap">{{ iban }}</code>, Verwendungszweck „Rechnung {{ x.nummer }}“.{% endif %}</p>
+{% if qr %}<div style="display:flex;gap:12px;align-items:center"><div>{{ qr|safe }}</div><p class="klein">Mit der Banking-App scannen, Betrag und Verwendungszweck sind schon ausgefüllt.</p></div>{% endif %}

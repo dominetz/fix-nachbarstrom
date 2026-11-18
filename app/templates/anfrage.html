@@ -1,0 +1,13 @@
+{% extends "basis.html" %}
+{% block inhalt %}
+<p class="klein"><a href="/">← Startseite</a></p>
+<h1>{{ "Frage zum Strom teilen" if art == "p2p" else "Ihre Frage an uns" }}</h1>
+<p class="unter">Wir melden uns per E-Mail, meist innerhalb von zwei Werktagen.</p>
+{% if fehler %}<div class="fehler">{{ fehler }}</div>{% endif %}
+<div class="karte"><form method="post" action="/anfrage"><input type="hidden" name="art" value="{{ art }}">
+<div class="raster"><div><label>Vorname</label><input name="vorname" required value="{{ werte.vorname }}"></div><div><label>Nachname</label><input name="nachname" required value="{{ werte.nachname }}"></div></div>
+<div class="raster"><div><label>E-Mail</label><input type="email" name="email" required value="{{ werte.email }}"></div><div><label>Telefon (optional)</label><input name="telefon" value="{{ werte.telefon }}"></div><div><label>Ort (optional)</label><input name="ort" value="{{ werte.ort }}"></div></div>
+<label>Ihre Frage</label><textarea name="nachricht" rows="5" required>{{ werte.nachricht }}</textarea>
+<label><input type="checkbox" name="einwilligung" value="true"> Ich bin einverstanden, dass {{ dienstleister.firma }} meine Angaben nutzt, um die Frage zu beantworten.</label>
+<p><button>Absenden</button></p></form></div>
+{% endblock %}

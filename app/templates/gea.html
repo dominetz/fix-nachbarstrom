@@ -1,0 +1,100 @@
+{% extends "verwaltung_basis.html" %}
+{% import "_status.html" as status %}
+{% block inhalt %}
+{% set verwaltet = g.modell.value == "verwaltet" %}
+<p class="klein nicht-drucken"><a href="/verwaltung/gea">← GEA</a></p>
+<h1>{{ g.titel }}</h1>
+<p class="unter">{{ status.gea(g.status) }} · {{ "FIX rechnet ab" if verwaltet else "Betreiber rechnet selbst ab" }} · Aufteilung {{ g.aufteilung }} · {% if g.preis_ct_kwh > 0 %}{{ g.preis_ct_kwh|zahl(2) }} ct/kWh für die Wohnungen{% else %}ohne Preis{% endif %} · Servicegebühr {{ g.gebuehr_ct_kwh|zahl(2) }} ct/kWh{% if g.aktiv_seit %} · Daten seit {{ g.aktiv_seit.strftime("%d.%m.%Y") }}{% endif %}</p>
+<p class="nicht-drucken">Betreiber: <b>{{ betreiber.name }}</b>{% if betreiber.email %} · {{ betreiber.email }}{% endif %} · <a href="{{ bereich }}">Bereich des Betreibers öffnen</a>{% if anfrage %} · <a href="/verwaltung/anfragen">Anfrage vom {{ anfrage.erstellt.strftime("%d.%m.%Y") }}</a>{% endif %}</p>
+{% if ohne_zp %}<div class="warnung">Der Zählpunkt der Anlage ist noch nicht eingetragen. Die Erzeugung wird bis dahin aus den Anteilen der Wohnungen berechnet. Eintragen unter <a href="#einstellungen">Einstellungen</a>.</div>{% endif %}
+
+{% if a %}
+<div class="raster">
+<div class="kpi"><div class="wert">{{ a.erzeugung|zahl }} <small>kWh</small></div><div class="label">{{ "Erzeugung der Anlage" if a.aus_anlage else "Erzeugung, aus den Anteilen berechnet" }} ({{ a.monate|length }} {{ "Monat" if a.monate|length == 1 else "Monate" }})</div></div>
+<div class="kpi"><div class="wert">{{ a.genutzt|zahl }} <small>kWh</small></div><div class="label">im Haus genutzt · {{ (a.genutzt / a.erzeugung * 100 if a.erzeugung else 0)|zahl }} % der Erzeugung</div></div>
+<div class="kpi"><div class="wert">{{ (a.genutzt / a.verbrauch * 100 if a.verbrauch else 0)|zahl }} <small>%</small></div><div class="label">des Verbrauchs der Wohnungen gedeckt</div></div>
+<div class="kpi"><div class="wert">{{ a.gebuehr|zahl(2) }} <small>€</small></div><div class="label">Servicegebühr netto in diesem Zeitraum (berechnet)</div></div>
+</div>
+<div class="zwei">
+<div class="karte"><h2>Je Monat</h2>{{ a.diagramm|safe }}</div>
+<div class="karte"><div style="display:flex;justify-content:space-between;align-items:start;gap:10px;flex-wrap:wrap"><h2>Tagesverlauf {{ tag.strftime("%d.%m.%Y") }}</h2>
+<form method="get" class="nicht-drucken" style="display:flex;gap:6px"><input type="date" name="tag" value="{{ tag }}" style="width:auto"><button class="zweit klein-knopf">Zeigen</button></form></div>
+{{ tagesdiagramm|safe }}<p class="klein">Leistung in kW je Viertelstunde.</p></div>
+</div>
+<div class="karte tabelle"><h2>Im Haus genutzt je Wohnung und Monat (kWh)</h2>
+<table><tr><th>Wohnung</th>{% for b in a.beschriftung %}<th class="zahl">{{ b }}</th>{% endfor %}<th class="zahl">Summe</th><th class="zahl">Verbrauch</th><th class="zahl">Anteil</th>{% if a.preis > 0 %}<th class="zahl">Wert</th>{% endif %}</tr>
+{% for z in a.zeilen %}<tr><td>{{ z.t.name }}</td>{% for w in z.monate %}<td class="zahl">{{ w|zahl }}</td>{% endfor %}<td class="zahl"><b>{{ z.summe.eigendeckung|zahl }}</b></td><td class="zahl">{{ z.summe.verbrauch|zahl }}</td><td class="zahl">{{ z.quote|zahl }} %</td>{% if a.preis > 0 %}<td class="zahl">{{ z.betrag|zahl(2) }} €</td>{% endif %}</tr>{% endfor %}
+<tr><th>Summe</th>{% for w in a.genutzt_je_monat %}<th class="zahl">{{ w|zahl }}</th>{% endfor %}<th class="zahl">{{ a.genutzt|zahl }}</th><th class="zahl">{{ a.verbrauch|zahl }}</th><th class="zahl">{{ (a.genutzt / a.verbrauch * 100 if a.verbrauch else 0)|zahl }} %</th>{% if a.preis > 0 %}<th class="zahl">{{ (a.genutzt * a.preis / 100)|zahl(2) }} €</th>{% endif %}</tr>
+</table><p class="klein">„Im Haus genutzt“ ist die Eigendeckung aus den EDA-Daten.{% if a.preis > 0 %} Wert = Menge × {{ a.preis|zahl(2) }} ct/kWh netto (berechnet).{% endif %}</p></div>
+{% else %}
+<div class="hinweis">Für diese GEA gibt es noch keine Energiedaten. Den EDA-Export unten hochladen.</div>
+{% endif %}
+
+<div class="zwei">
+<div class="karte"><h2>EDA-Export hochladen</h2>
+<form method="post" action="/verwaltung/gea/{{ g.id }}/energiedaten" enctype="multipart/form-data" class="zeile"><div><input type="file" name="dateien" accept=".xlsx,.csv,.txt" multiple required></div><button>Importieren</button></form>
+<p class="klein">Neue Zählpunkte im Export werden als Wohnung aufgenommen. Der Betreiber kann das auch selbst in seinem Bereich.</p></div>
+<div class="karte" id="abrechnung"><h2>Abrechnungsgrundlage (Excel)</h2>
+<form method="get" action="/verwaltung/gea/{{ g.id }}/grundlage" class="zeile">
+<div><label>Von</label><input type="date" name="von" value="{{ zeitraeume[0][0] if zeitraeume else vorschlag[0] }}" required></div>
+<div><label>Bis</label><input type="date" name="bis" value="{{ zeitraeume[0][1] if zeitraeume else vorschlag[1] }}" required></div>
+<button class="zweit">Herunterladen</button></form>
+<p class="klein">Je Wohnung Verbrauch, zugeteilte Menge, Eigendeckung und Betrag, dazu eine Tabelle je Monat.</p></div>
+</div>
+
+<div class="karte"><h2>{{ "Rechnungen an die Wohnungen und Servicegebühr" if verwaltet else "Servicegebühr" }}</h2>
+{% if verwaltet or g.gebuehr_ct_kwh > 0 %}
+<form method="post" action="/verwaltung/gruppe/{{ g.id }}/abrechnungslauf" class="zeile">
+<div><label>Von</label><input type="date" name="von" value="{{ vorschlag[0] }}" required></div>
+<div><label>Bis</label><input type="date" name="bis" value="{{ vorschlag[1] }}" required></div>
+<button>{{ "Rechnungen erstellen" if verwaltet else "Servicegebühr abrechnen" }}</button></form>
+<p class="klein">{% if verwaltet %}Je Wohnung eine Rechnung im Namen des Betreibers (Eigendeckung × Preis), Mails im Postausgang. {% endif %}{% if g.gebuehr_ct_kwh > 0 %}Die Servicegebühr ({{ g.gebuehr_ct_kwh|zahl(2) }} ct je genutzter kWh) geht als eigene Rechnung von {{ dienstleister.firma }} an den Betreiber.{% endif %}</p>
+{% else %}<p class="klein">Der Betreiber rechnet selbst ab und es ist keine Servicegebühr eingestellt. Für FIX ist hier nichts abzurechnen.</p>{% endif %}
+{% if rechnungen %}<div class="tabelle"><table><tr><th>Nummer</th><th>Wohnung</th><th>Zeitraum</th><th class="zahl">kWh</th><th class="zahl">Brutto</th><th>Status</th><th></th></tr>
+{% for r in rechnungen %}{% if loop.index == 10 %}</table><details><summary class="klein" style="margin:8px 0">Ältere Rechnungen ({{ rechnungen|length - 9 }})</summary><table>{% endif %}<tr><td><a href="/verwaltung/rechnung/{{ r.id }}">{{ r.nummer }}</a></td><td>{{ namen.get(r.abnehmer_id, r.abnehmer_id) }}</td><td>{{ r.von.strftime("%d.%m.%y") }} – {{ r.bis.strftime("%d.%m.%y") }}</td><td class="zahl">{{ r.kwh|zahl(1) }}</td><td class="zahl">{{ r.brutto|zahl(2) }} €</td><td>{{ status.rechnung(r) }}</td>
+<td><form method="post" action="/verwaltung/rechnung/{{ r.id }}/bezahlt"><input type="hidden" name="zurueck" value="/verwaltung/gea/{{ g.id }}#abrechnung"><button class="zweit klein-knopf">{{ "Offen setzen" if r.bezahlt_am else "Bezahlt" }}</button></form></td></tr>{% endfor %}</table>{% if rechnungen|length >= 10 %}</details>{% endif %}</div>{% endif %}
+{% if gebuehren %}<h3 style="font-size:1rem;margin-top:16px">Servicegebühren</h3><div class="tabelle"><table><tr><th>Nummer</th><th>Zeitraum</th><th class="zahl">kWh</th><th class="zahl">Netto</th><th class="zahl">Brutto</th><th>Status</th><th></th></tr>
+{% for x in gebuehren %}<tr><td><a href="/verwaltung/gebuehr/{{ x.id }}">{{ x.nummer }}</a></td><td>{{ x.von.strftime("%d.%m.%y") }} – {{ x.bis.strftime("%d.%m.%y") }}</td><td class="zahl">{{ x.kwh|zahl(1) }}</td><td class="zahl">{{ x.netto|zahl(2) }} €</td><td class="zahl">{{ x.brutto|zahl(2) }} €</td><td>{{ status.rechnung(x) }}</td>
+<td><form method="post" action="/verwaltung/gebuehr/{{ x.id }}/bezahlt"><input type="hidden" name="zurueck" value="/verwaltung/gea/{{ g.id }}#abrechnung"><button class="zweit klein-knopf">{{ "Offen setzen" if x.bezahlt_am else "Bezahlt" }}</button></form></td></tr>{% endfor %}</table></div>{% endif %}
+</div>
+
+<div class="karte tabelle" id="wohnungen"><h2>Wohnungen ({{ wohnungen|length }})</h2>
+<form method="post" action="/verwaltung/gea/{{ g.id }}/wohnungen">
+<table><tr><th>Wohnung</th><th>Vorname</th><th>Nachname</th><th>E-Mail</th>{% if g.aufteilung == "statisch" %}<th>Anteil %</th>{% endif %}<th>Zählpunkt</th></tr>
+{% for m, t in wohnungen %}<tr><td><input name="wohnung_{{ t.id }}" value="{{ t.wohnung or '' }}" style="min-width:90px"></td><td><input name="vorname_{{ t.id }}" value="{{ t.vorname }}"></td><td><input name="nachname_{{ t.id }}" value="{{ t.nachname }}"></td><td><input name="email_{{ t.id }}" value="{{ t.email }}" type="email"></td>
+{% if g.aufteilung == "statisch" %}<td><input name="anteil_{{ t.id }}" value="{{ m.anteil_prozent if m.anteil_prozent is not none else '' }}" style="width:80px"></td>{% else %}<input type="hidden" name="anteil_{{ t.id }}" value="{{ m.anteil_prozent if m.anteil_prozent is not none else '' }}">{% endif %}
+<td class="klein"><a href="{{ bereiche[t.id] }}" title="Bereich der Wohnung">{{ maskiert(t.zaehlpunkt) }}</a></td></tr>{% endfor %}
+<tr><td><input name="neu_wohnung" placeholder="neu: Top …"></td><td colspan="3"><input name="neu_zaehlpunkt" placeholder="Zählpunkt einer weiteren Wohnung (AT…)"></td><td colspan="2"></td></tr>
+</table><p><button class="zweit">Wohnungen speichern</button></p></form>
+<p class="klein">Mit E-Mail bekommt eine Wohnung bei „FIX rechnet ab“ ihre Rechnung als Mail-Entwurf im Postausgang.</p></div>
+
+<div class="zwei">
+{% if verwaltet %}<div class="karte"><h2>Preisänderung ankündigen</h2>
+{% if g.preis_neu_ab %}<p class="hinweis">Angekündigt: {{ g.preis_neu_ct_kwh|zahl(2) }} ct/kWh ab {{ g.preis_neu_ab.strftime("%d.%m.%Y") }}.</p>{% endif %}
+<form method="post" action="/verwaltung/gruppe/{{ g.id }}/preisaenderung">
+<p class="klein">Mindestens einen Monat vorher, mit Begründung. Jede Wohnung bekommt eine Mitteilung (Postausgang).</p>
+<div class="zeile"><div><label>Neuer Preis ct/kWh netto</label><input type="number" step="0.01" name="neuer_preis" required></div>
+<div><label>Gültig ab (frühestens {{ frueheste_aenderung.strftime("%d.%m.%Y") }})</label><input type="date" name="ab" min="{{ frueheste_aenderung }}" required></div></div>
+<label>Grund</label><input name="grund" required><p><button class="zweit">Ankündigen</button></p></form></div>{% endif %}
+
+<div class="karte" id="einstellungen"><h2>Einstellungen</h2>
+<form method="post" action="/verwaltung/gea/{{ g.id }}">
+<div class="zeile"><div><label>Name</label><input name="name" value="{{ g.name or '' }}"></div>
+<div><label>Status</label><select name="status">{% for st in stati %}<option value="{{ st.value }}" {{ "selected" if st == g.status }}>{{ gea_status_text[st] }}</option>{% endfor %}</select></div></div>
+<div class="zeile"><div><label>Abrechnung</label><select name="modell"><option value="selbst" {{ "selected" if not verwaltet }}>Betreiber rechnet selbst ab</option><option value="verwaltet" {{ "selected" if verwaltet }}>FIX rechnet ab</option></select></div>
+<div><label>Aufteilung</label><select name="aufteilung"><option value="dynamisch" {{ "selected" if g.aufteilung == "dynamisch" }}>dynamisch</option><option value="statisch" {{ "selected" if g.aufteilung == "statisch" }}>statisch</option></select></div></div>
+<div class="zeile"><div><label>Preis ct/kWh netto</label><input type="number" step="0.01" name="preis_ct_kwh" value="{{ g.preis_ct_kwh }}"></div>
+<div><label>USt Betreiber</label><select name="ust_satz"><option value="0" {{ "selected" if not g.ust_satz }}>0 %</option><option value="0.2" {{ "selected" if g.ust_satz }}>20 %</option></select></div>
+<div><label>Servicegebühr ct/kWh</label><input type="number" step="0.01" name="gebuehr_ct_kwh" value="{{ g.gebuehr_ct_kwh }}"></div></div>
+<label><input type="checkbox" name="rechnung_monatlich" value="true" {{ "checked" if g.rechnung_monatlich }}> Monatlich abrechnen</label>
+<div class="zeile"><div><label>Gemeinschafts-ID</label><input name="gemeinschafts_id" value="{{ g.gemeinschafts_id or '' }}"></div>
+<div><label>Marktpartner-ID (optional)</label><input name="marktpartner_id" value="{{ g.marktpartner_id or '' }}"></div></div>
+<div class="zeile"><div><label>Zählpunkt der Anlage</label><input name="anlage_zp" placeholder="AT00…" value="{{ '' if ohne_zp else betreiber.zaehlpunkt }}"></div><div><label>Anlage kWp</label><input type="number" step="0.1" name="anlage_kwp" value="{{ betreiber.anlage_kwp }}"></div></div>
+<h3 style="font-size:1rem;margin:14px 0 0">Betreiber</h3>
+<div class="zeile"><div><label>Vorname</label><input name="vorname" value="{{ betreiber.vorname }}"></div><div><label>Nachname</label><input name="nachname" value="{{ betreiber.nachname }}"></div><div><label>Firma</label><input name="firma" value="{{ betreiber.firma or '' }}"></div></div>
+<div class="zeile"><div><label>Straße</label><input name="strasse" value="{{ betreiber.strasse }}"></div><div><label>PLZ</label><input name="plz" value="{{ betreiber.plz }}"></div><div><label>Ort</label><input name="ort" value="{{ betreiber.ort }}"></div></div>
+<div class="zeile"><div><label>E-Mail</label><input name="email" type="email" value="{{ betreiber.email }}"></div><div><label>Telefon</label><input name="telefon" value="{{ betreiber.telefon or '' }}"></div></div>
+<label>Notiz</label><textarea name="notiz" rows="2">{{ g.notiz or '' }}</textarea>
+<p><button>Speichern</button></p></form></div>
+</div>
+{% endblock %}

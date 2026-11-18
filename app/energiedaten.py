@@ -21,8 +21,10 @@ import random
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 
-from openpyxl import Workbook, load_workbook
+from openpyxl import Workbook
 
+from . import eda_import
+from .eda_import import FELDER, ZEITFORMAT, Import  # noqa: F401 - bisherige Importe bleiben gültig
 from .models import Profiltyp, Teilnehmer
 from .zaehlpunkt import normalisieren
 
@@ -34,14 +36,6 @@ RESTUEBERSCHUSS = "Restüberschuss bei EG und je ZP [kWh]"
 
 SPALTEN_ABNEHMER = [(VERBRAUCH, "verbrauch"), (ANTEIL, "anteil"), (EIGENDECKUNG, "eigendeckung")]
 SPALTEN_ERZEUGER = [(ERZEUGUNG, "erzeugung"), (RESTUEBERSCHUSS, "restueberschuss")]
-FELDER = ("verbrauch", "anteil", "eigendeckung", "erzeugung", "restueberschuss")
-
-# Stichworte zum Erkennen der Spalten, die ersten Treffer gewinnen
-_STICHWORTE = [("eigendeckung", "eigendeckung"), ("restüberschuss", "restueberschuss"),
-               ("restueberschuss", "restueberschuss"), ("anteil", "anteil"),
-               ("erzeugung", "erzeugung"), ("verbrauch", "verbrauch")]
-
-ZEITFORMAT = "%Y-%m-%d %H:%M"
 
 
 def viertelstunden(von: date, bis: date) -> list[datetime]:
@@ -66,9 +60,8 @@ class Spur:
 
 def export_schreiben(spuren: list[Spur], zeiten: list[datetime], gemeinschafts_id: str) -> bytes:
     """Excel-Datei im Aufbau des EDA-Exports (ein Monat)."""
-    wb = Workbook()
-    ue = wb.active
-    ue.title = "Übersicht"
+    wb = Workbook(write_only=True)
+    ue = wb.create_sheet("Übersicht")
     von, bis = zeiten[0].date(), zeiten[-1].date()
     ue.append([f"Energiedaten Gemeinschaft {gemeinschafts_id}"])
     ue.append([f"Zeitraum: {von:%d.%m.%Y} – {bis:%d.%m.%Y}"])
@@ -94,97 +87,30 @@ def export_schreiben(spuren: list[Spur], zeiten: list[datetime], gemeinschafts_i
     ws.append(kopf_name)
     for i, zeit in enumerate(zeiten):
         ws.append([zeit.strftime("%d.%m.%Y %H:%M:%S"), *(round(sp[i], 3) for sp in spalten)])
-    ws.column_dimensions["A"].width = 22
     puffer = io.BytesIO()
     wb.save(puffer)
     return puffer.getvalue()
 
 
+def als_import(spuren: list[Spur], zeiten: list[datetime], gemeinschafts_id: str | None = None) -> Import:
+    """Simulierte Werte direkt als Import, ohne Umweg über die Excel-Datei (für den Testbetrieb)."""
+    werte = []
+    for sp in spuren:
+        for i, z in enumerate(zeiten):
+            zeile = {"zaehlpunkt": sp.teilnehmer.zaehlpunkt, "beginn": z.strftime(ZEITFORMAT),
+                     **dict.fromkeys(FELDER, 0.0)}
+            for f, liste in sp.werte.items():
+                zeile[f] = round(liste[i], 3)
+            werte.append(zeile)
+    return Import(werte, {sp.teilnehmer.zaehlpunkt for sp in spuren}, zeiten[0], zeiten[-1], gemeinschafts_id,
+                  {sp.teilnehmer.zaehlpunkt: "erzeugung" if sp.erzeuger else "verbrauch" for sp in spuren})
+
+
 # ---------------------------------------------------------------- Einlesen
 
-@dataclass
-class Import:
-    werte: list[dict]  # je Zeile: zaehlpunkt, beginn, und die Felder
-    zaehlpunkte: set[str]
-    von: datetime
-    bis: datetime
-
-
-def _zeit(wert) -> datetime | None:
-    if isinstance(wert, datetime):
-        return wert
-    if not isinstance(wert, str):
-        return None
-    text = wert.strip()
-    for fmt in ("%d.%m.%Y %H:%M:%S", "%d.%m.%Y %H:%M", "%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M"):
-        try:
-            return datetime.strptime(text, fmt)
-        except ValueError:
-            continue
-    return None
-
-
-def _zahl(wert) -> float:
-    if wert is None or wert == "":
-        return 0.0
-    if isinstance(wert, (int, float)):
-        return float(wert)
-    text = str(wert).strip().replace(" ", "")
-    if "," in text and "." in text:
-        text = text.replace(".", "")
-    return float(text.replace(",", "."))
-
-
-def _feld(titel: str) -> str | None:
-    t = (titel or "").lower()
-    for wort, feld in _STICHWORTE:
-        if wort in t:
-            return feld
-    return None
-
-
-def export_einlesen(inhalt: bytes) -> Import:
-    try:
-        wb = load_workbook(io.BytesIO(inhalt), read_only=True, data_only=True)
-    except Exception as e:  # noqa: BLE001 - beliebige kaputte Datei
-        raise ValueError("Die Datei ist keine lesbare Excel-Datei (.xlsx).") from e
-    for ws in wb.worksheets:
-        zeilen = ws.iter_rows(values_only=True)
-        kopf = []
-        for zeile in zeilen:
-            if zeile and _zeit(zeile[0]):
-                return _werte_lesen(kopf, zeile, zeilen)
-            kopf.append(zeile)
-            if len(kopf) > 15:
-                break
-    raise ValueError("In der Datei wurde kein Blatt mit Viertelstundenwerten gefunden.")
-
-
-def _werte_lesen(kopf: list[tuple], erste: tuple, rest) -> Import:
-    zp_zeile = next((z for z in kopf if z and str(z[0] or "").lower().startswith(("meteringpoint", "zählpunkt",
-                                                                                   "zaehlpunkt"))), None)
-    titel_zeile = kopf[-1] if kopf else None
-    if not zp_zeile or not titel_zeile:
-        raise ValueError("Kopfzeilen mit Zählpunkt und Messgröße fehlen.")
-    spalten = []  # (index, zählpunkt, feld)
-    for i in range(1, len(zp_zeile)):
-        zp, feld = normalisieren(str(zp_zeile[i] or "")), _feld(str(titel_zeile[i] if i < len(titel_zeile) else ""))
-        if zp and feld:
-            spalten.append((i, zp, feld))
-    if not spalten:
-        raise ValueError("Keine bekannten Spalten gefunden (z. B. „Eigendeckung“, „Erzeugung“).")
-    zeilen: dict[tuple[str, str], dict] = {}
-    von = bis = None
-    for zeile in [erste, *rest]:
-        zeit = _zeit(zeile[0]) if zeile else None
-        if not zeit:
-            continue
-        von, bis = von or zeit, zeit
-        beginn = zeit.strftime(ZEITFORMAT)
-        for i, zp, feld in spalten:
-            ziel = zeilen.setdefault((zp, beginn), {"zaehlpunkt": zp, "beginn": beginn, **dict.fromkeys(FELDER, 0.0)})
-            ziel[feld] += _zahl(zeile[i] if i < len(zeile) else None)
-    return Import(list(zeilen.values()), {zp for _, zp, _ in spalten}, von, bis)
+def export_einlesen(inhalt: bytes, zuordnung: dict[str, str] | None = None, dateiname: str = "") -> Import:
+    """Siehe eda_import.einlesen."""
+    return eda_import.einlesen(inhalt, zuordnung, dateiname)
 
 
 # ---------------------------------------------------------------- Fiktive Daten
@@ -210,8 +136,9 @@ def _lastform(typ: Profiltyp, tag: date) -> list[float]:
 
 
 def simulieren(erzeuger: Teilnehmer, abnehmer: list[Teilnehmer], zeiten: list[datetime],
-               seed: int = 1) -> list[Spur]:
-    """Fiktive Viertelstundenwerte mit Wetter. Geteilt wird dynamisch nach Verbrauch."""
+               seed: int = 1, schluessel: dict[int, float] | None = None) -> list[Spur]:
+    """Fiktive Viertelstundenwerte mit Wetter. Geteilt wird dynamisch nach Verbrauch, oder
+    statisch nach festen Anteilen (schluessel: Teilnehmer-ID -> Anteil 0…1)."""
     zufall = random.Random(seed)
     tage = sorted({z.date() for z in zeiten})
     wetter = {t: zufall.betavariate(2.2, 1.3) for t in tage}  # 0 trüb … 1 klar
@@ -251,9 +178,12 @@ def simulieren(erzeuger: Teilnehmer, abnehmer: list[Teilnehmer], zeiten: list[da
         bedarf = sum(lasten[a.id][i] for a in abnehmer)
         verteilt = 0.0
         for a in abnehmer:
-            anteil = ueberschuss * lasten[a.id][i] / bedarf if bedarf else 0.0
+            if schluessel:  # statisch: fester Anteil, auch wenn die Wohnung ihn nicht braucht
+                anteil = ueberschuss * schluessel.get(a.id, 0.0)
+            else:
+                anteil = min(ueberschuss * lasten[a.id][i] / bedarf, lasten[a.id][i]) if bedarf else 0.0
             deckung = min(anteil, lasten[a.id][i])
-            spuren[a.id].werte["anteil"].append(deckung)
+            spuren[a.id].werte["anteil"].append(anteil)
             spuren[a.id].werte["eigendeckung"].append(deckung)
             verteilt += deckung
         rest.append(ueberschuss - verteilt)

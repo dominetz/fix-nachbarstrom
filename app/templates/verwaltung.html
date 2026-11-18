@@ -2,7 +2,7 @@
 {% import "_status.html" as status %}
 {% block inhalt %}
 <h1>Übersicht</h1>
-<p class="unter">{{ erzeuger }} Erzeuger und {{ abnehmer }} Abnehmer angemeldet{% if gesamt %} · Energiedaten bis {{ gesamt.bis.strftime("%d.%m.%Y") }}{% endif %}</p>
+<p class="unter">P2P: {{ erzeuger }} Erzeuger und {{ abnehmer }} Abnehmer angemeldet · {{ gea_zeilen|length }} GEA{% if gesamt %} · Energiedaten bis {{ gesamt.bis.strftime("%d.%m.%Y") }}{% endif %}</p>
 
 {% if testmodus %}
 <div class="karte" style="border-color:#bcd9b2;background:var(--gruen-hell)">
@@ -16,15 +16,18 @@
 <li><b>Rechnung ansehen:</b> mit QR-Code, als PDF drucken. Unter <a href="/verwaltung/rechnungen">Rechnungen</a> Zahlungen abhaken und eine Zahlungserinnerung erzeugen.</li>
 <li><b>Kundenbereich:</b> in einer Gruppe auf einen Namen klicken, so sieht es der Kunde.</li>
 <li><b>Neue Gruppe:</b> unter <a href="/verwaltung/matching">Matching</a> wartet ein Vorschlag, unter <a href="/verwaltung/erinnerungen">Erinnerungen</a> eine fällige Erinnerung.</li>
+<li><b>GEA:</b> unter <a href="/verwaltung/gea">GEA</a> gibt es zwei fiktive Häuser. Den September-Export vom „Sonnenhof“ (Testdateien unter Energiedaten) im <a href="/verwaltung/gea/{{ gea_zeilen[0][0].id if gea_zeilen else '' }}">Bereich des Betreibers</a> hochladen, so wie es der Kunde macht. Danach die Abrechnungsgrundlage als Excel holen.</li>
+<li><b>Echter Export:</b> unter <a href="/verwaltung/gea/neu">Neue GEA</a> den Export eurer echten GEA hochladen. Kennt die Plattform eine Spalte nicht, fragt sie nach. Klappt das Einlesen nicht, zeigt sie den Aufbau der Datei ohne Nummern und Namen, den kannst du mir schicken.</li>
+<li><b>Anfragen:</b> unter <a href="/verwaltung/anfragen">Anfragen</a> liegen zwei Beispiele, eine davon lässt sich direkt in eine GEA umwandeln.</li>
 </ol>
 </div>
 {% endif %}
 
 <div class="raster">
-<a class="kpi" href="#gruppen"><div class="wert">{{ k.aktive_gruppen }}</div><div class="label">aktive Gruppen · {{ k.zaehlpunkte_aktiv }} Zählpunkte</div></a>
-<div class="kpi"><div class="wert">{{ k.geteilt|zahl }} <small>kWh</small></div><div class="label">geteilt in 12 Monaten · {{ k.quote|zahl }} % der Einspeisung</div></div>
-<a class="kpi" href="/verwaltung/rechnungen"><div class="wert">{{ k.umsatz|zahl(2) }} <small>€</small></div><div class="label">abgerechnet in 12 Monaten (für die Erzeuger)</div></a>
-<a class="kpi" href="/verwaltung/rechnungen?filter=überfällig"><div class="wert">{{ k.offen|zahl(2) }} <small>€</small></div><div class="label">offen{% if k.ueberfaellig %} · <span class="badge rot">{{ k.ueberfaellig }} überfällig</span>{% endif %}</div></a>
+<a class="kpi" href="#gruppen"><div class="wert">{{ k.aktive_gruppen }} <small>P2P</small> · {{ k.aktive_gea }} <small>GEA</small></div><div class="label">aktiv · {{ k.zaehlpunkte_aktiv }} Zählpunkte</div></a>
+<div class="kpi"><div class="wert">{{ k.geteilt|zahl }} <small>kWh</small></div><div class="label">geteilt in 12 Monaten · {{ k.quote|zahl }} % der Erzeugung</div></div>
+<a class="kpi" href="/verwaltung/rechnungen#gebuehren"><div class="wert">{{ k.gebuehren|zahl(2) }} <small>€</small></div><div class="label">Servicegebühren FIX netto, 12 Monate{% if k.gebuehren_offen %} · {{ k.gebuehren_offen|zahl(2) }} € offen{% endif %}</div></a>
+<a class="kpi" href="/verwaltung/rechnungen?filter=überfällig"><div class="wert">{{ k.offen|zahl(2) }} <small>€</small></div><div class="label">offen bei Erzeugern und Betreibern{% if k.ueberfaellig %} · <span class="badge rot">{{ k.ueberfaellig }} überfällig</span>{% endif %}</div></a>
 </div>
 
 <div class="zwei">
@@ -33,17 +36,24 @@
 </div>
 <div class="karte"><h2>Zu tun</h2>
 <ul class="aufgaben">
-{% for g, e, von, bis, moeglich in faellig %}{% if moeglich %}<li><span>Abrechnung Gruppe {{ g.id }} ({{ e.name }}): {{ von.strftime("%d.%m.%Y") }} – {{ bis.strftime("%d.%m.%Y") }}</span><a class="knopf klein-knopf" href="/verwaltung/gruppe/{{ g.id }}#abrechnung">Abrechnen</a></li>
-{% else %}<li><span class="klein">Gruppe {{ g.id }}: nächste Abrechnung bis {{ bis.strftime("%d.%m.%Y") }}, Energiedaten fehlen noch</span><a class="knopf zweit klein-knopf" href="/verwaltung/energiedaten">Importieren</a></li>{% endif %}{% endfor %}
+{% if k.anfragen %}<li><span>{{ k.anfragen }} neue Anfrage(n)</span><a class="knopf klein-knopf" href="/verwaltung/anfragen">Ansehen</a></li>{% endif %}
+{% if k.uploads %}<li><span>{{ k.uploads }} Export(e) warten auf Zuordnung</span><a class="knopf klein-knopf" href="/verwaltung/energiedaten">Ansehen</a></li>{% endif %}
+{% for g, e, von, bis, moeglich, was in faellig %}{% if moeglich %}<li><span>{{ was }} {{ g.titel }}{% if g.art.value == "p2p" %} ({{ e.name }}){% endif %}: {{ von.strftime("%d.%m.%Y") }} – {{ bis.strftime("%d.%m.%Y") }}</span><a class="knopf klein-knopf" href="{{ gruppenlink(g) }}#abrechnung">Abrechnen</a></li>
+{% else %}<li><span class="klein">{{ g.titel }}: nächste {{ was }} bis {{ bis.strftime("%d.%m.%Y") }}, Energiedaten fehlen noch</span><a class="knopf zweit klein-knopf" href="{{ gruppenlink(g) }}">Ansehen</a></li>{% endif %}{% endfor %}
 {% if k.ueberfaellig %}<li><span>{{ k.ueberfaellig }} Rechnung(en) überfällig</span><a class="knopf zweit klein-knopf" href="/verwaltung/rechnungen?filter=überfällig">Ansehen</a></li>{% endif %}
 {% if anzahl_erinnerungen %}<li><span>{{ anzahl_erinnerungen }} Erinnerung(en) an die Zustimmung im Netzportal</span><a class="knopf zweit klein-knopf" href="/verwaltung/erinnerungen">Ansehen</a></li>{% endif %}
 {% if k.postausgang %}<li><span>{{ k.postausgang }} Mail(s) im Postausgang</span><a class="knopf zweit klein-knopf" href="/verwaltung/postausgang">Ansehen</a></li>{% endif %}
 {% if k.frei %}<li><span>{{ k.frei }} Teilnehmer ohne Gruppe</span><a class="knopf zweit klein-knopf" href="/verwaltung/matching">Matching</a></li>{% endif %}
-{% if not (faellig or k.ueberfaellig or anzahl_erinnerungen or k.postausgang or k.frei) %}<li class="klein">Nichts offen.</li>{% endif %}
+{% if not (faellig or k.ueberfaellig or anzahl_erinnerungen or k.postausgang or k.frei or k.anfragen or k.uploads) %}<li class="klein">Nichts offen.</li>{% endif %}
 </ul></div>
 </div>
 
-<div class="karte" id="gruppen"><h2>Gruppen</h2>
+<div class="karte" id="gea"><div style="display:flex;justify-content:space-between;align-items:center"><h2>GEA</h2><a class="knopf zweit klein-knopf" href="/verwaltung/gea/neu">Neue GEA</a></div>
+<div class="tabelle"><table><tr><th>GEA</th><th>Betreiber</th><th>Status</th><th>Modell</th><th class="zahl">Wohnungen</th><th class="zahl">Gebühr</th></tr>
+{% for g, b, n in gea_zeilen %}<tr><td><a href="/verwaltung/gea/{{ g.id }}">{{ g.titel }}</a></td><td>{{ b.name }}</td><td>{{ status.gea(g.status) }}</td><td>{{ "FIX rechnet ab" if g.modell.value == "verwaltet" else "selbst" }}</td><td class="zahl">{{ n }}</td><td class="zahl">{{ g.gebuehr_ct_kwh|zahl(2) }} ct</td></tr>
+{% else %}<tr><td colspan="6">Noch keine GEA.</td></tr>{% endfor %}</table></div></div>
+
+<div class="karte" id="gruppen"><h2>P2P-Gruppen</h2>
 <div class="tabelle"><table><tr><th>Nr.</th><th>Erzeuger</th><th>Status</th><th class="zahl">Erwartet kWh/Jahr</th><th>Zone</th><th>Rechnung</th><th class="zahl">Preis</th></tr>
 {% for g, e in zeilen %}<tr><td><a href="/verwaltung/gruppe/{{ g.id }}">{{ g.id }}</a></td><td><a href="/verwaltung/gruppe/{{ g.id }}">{{ e.name }}</a><br><span class="klein">{{ e.ort }} · {{ e.anlage_kwp|zahl(1) }} kWp</span></td><td>{{ status.gruppe(g.status) }}</td><td class="zahl">{{ g.erwartete_kwh_jahr|zahl }}</td><td>{{ g.zonelevel }}</td><td>{{ "monatlich" if g.rechnung_monatlich else "jährlich" }}</td><td class="zahl">{{ g.preis_ct_kwh|zahl(2) }} ct</td></tr>
 {% else %}<tr><td colspan="7">Noch keine Gruppen. Vorschläge gibt es unter <a href="/verwaltung/matching">Matching</a>.</td></tr>{% endfor %}

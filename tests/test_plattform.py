@@ -261,7 +261,7 @@ def test_dienstleistung_kundenbereich_postausgang_preis(client):
     for n in offen:
         c.post(f"/verwaltung/postausgang/{n.id}/gesendet", auth=auth)
     assert "Nichts offen" in c.get("/verwaltung/postausgang", auth=auth).text
-    assert "aktive Gruppen" in c.get("/verwaltung", auth=auth).text
+    assert "P2P-Gruppen" in c.get("/verwaltung", auth=auth).text
 
 
 def test_neue_spalten_in_alter_datenbank(monkeypatch, tmp_path):
@@ -377,8 +377,291 @@ def test_testbetrieb_anlegen(monkeypatch, tmp_path):
     monkeypatch.setattr(demo_daten, "JAHR_VON", date(2026, 8, 1))
     demo_daten.anlegen(neu=True)
     assert sorted(p.name for p in (tmp_path / "testdaten").glob("*.xlsx")) == [
+        "EDA_Export_GEA_Bach_2026-08.xlsx", "EDA_Export_GEA_Bach_2026-09.xlsx",
+        "EDA_Export_GEA_Sonnenhof_2026-08.xlsx", "EDA_Export_GEA_Sonnenhof_2026-09.xlsx",
         "EDA_Export_Gruppe1_2026-08.xlsx", "EDA_Export_Gruppe1_2026-09.xlsx",
         "EDA_Export_Gruppe2_2026-08.xlsx", "EDA_Export_Gruppe2_2026-09.xlsx"]
     with Session(engine) as s:
-        assert len(s.exec(select(Rechnung)).all()) == 3  # Gruppe 1, August, drei Abnehmer
+        # August: Gruppe 1 drei Abnehmer, „Haus am Bach“ vier Wohnungen
+        assert len(s.exec(select(Rechnung)).all()) == 3 + 4
+        assert len(s.exec(select(main.Gebuehr)).all()) == 3  # Gruppe 1, Sonnenhof, Haus am Bach
         assert not s.exec(select(main.Messwert).where(main.Messwert.beginn >= "2026-09")).first()
+
+
+# ---------------------------------------------------------------- Import echter Exporte
+
+def _xlsx(zeilen, verbunden=()):
+    import io
+    from openpyxl import Workbook
+    wb = Workbook()
+    ws = wb.active
+    for z in zeilen:
+        ws.append(z)
+    for bereich in verbunden:
+        ws.merge_cells(bereich)
+    puffer = io.BytesIO()
+    wb.save(puffer)
+    return puffer.getvalue()
+
+
+GID = "AT00810000000000000000000TEST0001"
+
+
+def test_import_verbundene_zellen_qualitaet_und_wh():
+    from datetime import datetime
+    from app import eda_import as ei
+    datei = _xlsx([
+        ["Gemeinschafts-ID", GID], [],
+        ["MeteringpointID", None, zp(1), None, None, zp(2), None, None],
+        ["Energierichtung", None, "CONSUMPTION", None, None, "GENERATION", None, None],
+        ["Beginn", "Ende", "Gesamtverbrauch lt. Messung (bei Teilnahme gem. Erzeugung) [KWH]", "Qualität",
+         "Eigendeckung gemeinschaftliche Erzeugung [KWH]", "Gesamte gemeinschaftliche Erzeugung [Wh]", "Qualität",
+         "Summe"],
+        [datetime(2026, 10, 1, 0, 0), datetime(2026, 10, 1, 0, 15), 0.5, "L1", 0.1, 400, "L1", 9],
+        [datetime(2026, 10, 1, 0, 15), datetime(2026, 10, 1, 0, 30), 0.7, "L1", 0.2, 600, "L1", 9],
+    ], verbunden=["C3:E3", "F3:G3"])
+    imp = ei.einlesen(datei)
+    assert imp.zaehlpunkte == {zp(1), zp(2)} and imp.erzeuger == {zp(2)}
+    assert imp.gemeinschafts_id == GID and not imp.unbekannt and imp.intervall == 15
+    summe = {f: round(sum(w[f] for w in imp.werte), 3) for f in ("verbrauch", "eigendeckung", "erzeugung")}
+    assert summe == {"verbrauch": 1.2, "eigendeckung": 0.3, "erzeugung": 1.0}  # Wh in kWh umgerechnet
+
+
+def test_import_lange_csv_mit_codes_und_zeitzone():
+    from app import eda_import as ei
+    csv = (f"Zählpunkt;Beginn;Ende;Metercode;Wert\n"
+           f"{zp(1)};2026-10-01T00:00:00Z;2026-10-01T00:15:00Z;1-1:2.9.0 G.03;0,25\n"
+           f"{zp(1)};2026-10-01T00:00:00Z;2026-10-01T00:15:00Z;Gesamtverbrauch;1,5\n").encode()
+    imp = ei.einlesen(csv, dateiname="x.csv")
+    assert list(imp.unbekannt) == ["1-1:2.9.0 G.03"] and imp.unbekannt["1-1:2.9.0 G.03"] == ["0,25"]
+    assert imp.werte[0]["beginn"] == "2026-10-01 02:00"  # UTC in Ortszeit (Sommerzeit)
+    imp = ei.einlesen(csv, {ei.schluessel("1-1:2.9.0 G.03"): "eigendeckung"})
+    assert not imp.unbekannt and imp.werte[0]["eigendeckung"] == 0.25 and imp.werte[0]["verbrauch"] == 1.5
+
+
+def test_import_datum_und_uhrzeit_getrennt_zp_im_titel():
+    from datetime import datetime, time
+    from app import eda_import as ei
+    imp = ei.einlesen(_xlsx([
+        ["Datum", "Uhrzeit", f"{zp(1)} Eigendeckung [kWh]", f"{zp(2)} Erzeugung [kWh]"],
+        [datetime(2026, 10, 1), time(0, 0), 0.1, 2],
+        ["01.10.2026", "00:15", "0,2", "3"]]))
+    assert sorted({w["beginn"] for w in imp.werte}) == ["2026-10-01 00:00", "2026-10-01 00:15"]
+    assert round(sum(w["eigendeckung"] for w in imp.werte), 3) == 0.3
+
+
+def test_aufbau_bericht_ohne_nummern_und_namen():
+    from app import eda_import as ei
+    bericht = ei.aufbau_bericht(_xlsx([["Name", "Max Mustermann"], ["MeteringpointID", zp(1)],
+                                       ["Zeit", "Eigendeckung"], ["01.10.2026 00:00", 1]]))
+    assert zp(1) not in bericht and "Mustermann" not in bericht
+    assert "[Nummer 1]" in bericht and "Eigendeckung" in bericht
+    with pytest.raises(ValueError):
+        ei.einlesen(b"\x00\x01 keine Datei")
+
+
+# ---------------------------------------------------------------- GEA
+
+def _gea_export(von, bis, anlage=20, wohnungen=(21, 22, 23), gid=GID, seed=1):
+    """Fiktiver Export im Aufbau des Testbetriebs."""
+    from app import energiedaten as ed
+    b = _t(anlage, Rolle.ERZEUGER, kwh=0, kwp=20)
+    ab = [_t(n, Rolle.ABNEHMER, Profiltyp.HAUSHALT, 3000) for n in wohnungen]
+    zeiten = ed.viertelstunden(von, bis)
+    spuren = ed.simulieren(b, ab, zeiten, seed=seed)
+    return ed.export_schreiben(spuren, zeiten, gid), spuren
+
+
+def _gea_anlegen(c, datei, **extra):
+    daten = {"name": "Testhaus", "vorname": "Bea", "nachname": "Betreiber", "email": "b@example.com",
+             "modell": "selbst", "aufteilung": "dynamisch", "preis_ct_kwh": "12", "gebuehr_ct_kwh": "1",
+             "status": "aktiv", "rechnung_monatlich": "true", **extra}
+    return c.post("/verwaltung/gea/neu", data=daten, files={"datei": ("export.xlsx", datei)},
+                  auth=("admin", "test"), follow_redirects=False)
+
+
+def test_gea_aus_export_anlegen_und_betreiber_laedt_hoch(client):
+    from openpyxl import load_workbook
+    import io
+    c, engine = client
+    auth = ("admin", "test")
+    datei, spuren = _gea_export(date(2026, 6, 1), date(2026, 6, 30))
+    r = _gea_anlegen(c, datei)
+    assert r.status_code == 303 and r.headers["location"].startswith("/verwaltung/gea/")
+    gid = int(r.headers["location"].rsplit("/", 1)[1])
+    with Session(engine) as s:
+        g = s.get(Gruppe, gid)
+        betreiber = s.get(Teilnehmer, g.erzeuger_id)
+        assert g.art.value == "gea" and g.gemeinschafts_id == GID and betreiber.zaehlpunkt == zp(20)
+        assert len(main.importe.mitglieder(s, g)) == 3
+    seite = c.get(f"/verwaltung/gea/{gid}", auth=auth).text
+    assert "Wohnung 1" in seite and "Im Haus genutzt je Wohnung" in seite
+    bereich = re.search(r"http://localhost:8000(/mein/\d+/\w+)", seite).group(1)
+    assert "Monatlichen EDA-Export hochladen" in c.get(bereich).text
+
+    # Betreiber lädt den Juli selbst hoch, die Zahlen stehen sofort in seinem Bereich
+    juli, _ = _gea_export(date(2026, 7, 1), date(2026, 7, 31), seed=2)
+    antwort = c.post(f"{bereich}/energiedaten", files=[("dateien", ("juli.xlsx", juli))]).text
+    assert "übernommen" in antwort and "Jul 26" in antwort
+    # Datei einer fremden Gemeinschaft wird abgelehnt
+    fremd, _ = _gea_export(date(2026, 7, 1), date(2026, 7, 2), anlage=30, wohnungen=(31,), gid="AT00810000000000000000000ANDERE01")
+    assert "gehört nicht zu Ihrer GEA" in c.post(f"{bereich}/energiedaten", files=[("dateien", ("f.xlsx", fremd))]).text
+
+    # Abrechnungsgrundlage als Excel, Summe = Eigendeckung aller Wohnungen im Juni
+    x = c.get(f"{bereich}/grundlage", params={"von": "2026-06-01", "bis": "2026-06-30"})
+    ws = load_workbook(io.BytesIO(x.content))["Abrechnung"]
+    summe = next(z for z in ws.iter_rows(values_only=True) if z[0] == "Summe")
+    erwartet = sum(sum(sp.werte["eigendeckung"]) for sp in spuren[1:])
+    assert summe[5] == pytest.approx(erwartet, abs=0.05)
+    assert summe[8] == pytest.approx(round(erwartet * 0.12, 2), abs=0.05)
+
+    # Selbst abrechnende GEA: der Lauf erzeugt nur die Servicegebühr von FIX
+    seite = c.post(f"/verwaltung/gruppe/{gid}/abrechnungslauf", auth=auth,
+                   data={"von": "2026-06-01", "bis": "2026-06-30"}).text
+    assert "Servicegebühr" in seite
+    with Session(engine) as s:
+        assert not s.exec(select(Rechnung)).all()
+        gebuehr = s.exec(select(main.Gebuehr)).one()
+    assert gebuehr.kwh == pytest.approx(erwartet, abs=0.05)
+    assert gebuehr.netto == pytest.approx(round(erwartet * 0.01, 2), abs=0.01) and gebuehr.ust_satz == 0.2
+    assert c.get(f"{bereich}/gebuehr/{gebuehr.id}").status_code == 200
+    assert "FIX-" in c.get("/verwaltung/rechnungen", auth=auth).text
+
+
+def test_gea_spalten_einmal_zuordnen(client):
+    c, engine = client
+    auth = ("admin", "test")
+    zeilen = "Zählpunkt;Beginn;Metercode;Wert\n" + "".join(
+        f"{zp(n)};01.10.2026 12:{m:02d};{code};{wert}\n" for m in (0, 15) for n, code, wert in (
+            (40, "P.01", "2,0"), (41, "G.01", "1,0"), (41, "G.03", "0,8"), (42, "G.01", "0,5"), (42, "G.03", "0,5")))
+    r = c.post("/verwaltung/gea/neu", data={"name": "Codes", "modell": "selbst", "aufteilung": "dynamisch"},
+               files={"datei": ("codes.csv", zeilen.encode())}, auth=auth, follow_redirects=False)
+    assert r.headers["location"].startswith("/verwaltung/import/")
+    zuordnen = c.get(r.headers["location"], auth=auth).text
+    assert "P.01" in zuordnen and "kennt die Plattform noch nicht" in zuordnen
+    titel = re.findall(r"<td><b>(.*?)</b></td>", zuordnen)
+    wahl = {"P.01": "erzeugung", "G.01": "verbrauch", "G.03": "eigendeckung"}
+    r = c.post(r.headers["location"], auth=auth, follow_redirects=False,
+               data={f"feld_{i}": wahl[t] for i, t in enumerate(titel)})
+    assert r.headers["location"].startswith("/verwaltung/gea/")
+    gid = int(r.headers["location"].rsplit("/", 1)[1])
+    with Session(engine) as s:
+        g = s.get(Gruppe, gid)
+        assert s.get(Teilnehmer, g.erzeuger_id).zaehlpunkt == zp(40)
+        werte = main.auswertung.summen(s, [zp(41), zp(42)], date(2026, 10, 1), date(2026, 10, 1), gid)
+    assert werte[zp(41)]["eigendeckung"] == pytest.approx(1.6) and werte[zp(42)]["verbrauch"] == pytest.approx(1.0)
+    # Beim nächsten Export mit denselben Spalten fragt die Plattform nicht mehr
+    seite = c.post("/verwaltung/energiedaten", auth=auth, files=[("dateien", ("codes2.csv", zeilen.encode()))]).text
+    assert "importiert" in seite and "Codes" in seite
+
+
+def test_werte_je_gemeinschaft_getrennt(client):
+    """Eine Wohnung ist in einer GEA und zusätzlich in einer P2P-Gruppe."""
+    c, engine = client
+    auth = ("admin", "test")
+    gea_datei, gea_spuren = _gea_export(date(2026, 6, 1), date(2026, 6, 2))
+    gid_gea = int(_gea_anlegen(c, gea_datei).headers["location"].rsplit("/", 1)[1])
+    _anmelden(c, "erzeuger", 1, anlage_kwp=10, jahresverbrauch_kwh=3000, profiltyp="haushalt")
+    with Session(engine) as s:  # Wohnung 21 nimmt zusätzlich an der P2P-Gruppe teil
+        g = Gruppe(erzeuger_id=1, status=GruppenStatus.AKTIV, gemeinschafts_id="AT00810000000000000000000P2P00001")
+        s.add(g)
+        s.commit()
+        s.add(main.Mitglied(gruppe_id=g.id, teilnehmer_id=s.exec(select(Teilnehmer).where(
+            Teilnehmer.zaehlpunkt == zp(21))).one().id))
+        s.commit()
+        gid_p2p = g.id
+        e, w = s.get(Teilnehmer, 1), s.exec(select(Teilnehmer).where(Teilnehmer.zaehlpunkt == zp(21))).one()
+        from app import energiedaten as ed
+        zeiten = ed.viertelstunden(date(2026, 6, 1), date(2026, 6, 2))
+        p2p_spuren = ed.simulieren(e, [w], zeiten, seed=9)
+    p2p_datei = ed.export_schreiben(p2p_spuren, zeiten, "AT00810000000000000000000P2P00001")
+    seite = c.post("/verwaltung/energiedaten", auth=auth, files=[("dateien", ("p2p.xlsx", p2p_datei))]).text
+    assert "über die Gemeinschafts-ID" in seite
+    with Session(engine) as s:
+        in_gea = main.auswertung.summen(s, [zp(21)], date(2026, 6, 1), date(2026, 6, 2), gid_gea)[zp(21)]
+        in_p2p = main.auswertung.summen(s, [zp(21)], date(2026, 6, 1), date(2026, 6, 2), gid_p2p)[zp(21)]
+    assert in_gea["eigendeckung"] == pytest.approx(sum(gea_spuren[1].werte["eigendeckung"]), abs=0.01)
+    assert in_p2p["eigendeckung"] == pytest.approx(sum(p2p_spuren[1].werte["eigendeckung"]), abs=0.01)
+
+
+def test_alte_werte_ohne_gemeinschaft_werden_zugeordnet(client):
+    c, engine = client
+    _anmelden(c, "erzeuger", 1, anlage_kwp=10, jahresverbrauch_kwh=3000, profiltyp="haushalt")
+    _anmelden(c, "abnehmer", 2)
+    with Session(engine) as s:
+        g = Gruppe(erzeuger_id=1, status=GruppenStatus.AKTIV)
+        s.add(g)
+        s.commit()
+        s.add(main.Mitglied(gruppe_id=g.id, teilnehmer_id=2))
+        s.add(main.Messwert(zaehlpunkt=zp(2), beginn="2026-06-01 12:00", eigendeckung=1.0))
+        s.commit()
+        gid = g.id
+    main.importe.alte_werte_zuordnen(engine)
+    with Session(engine) as s:
+        assert s.exec(select(main.Messwert)).one().gruppe_id == gid
+
+
+def test_servicegebuehr_p2p(client):
+    from app import energiedaten as ed
+    c, engine = client
+    auth = ("admin", "test")
+    _anmelden(c, "erzeuger", 1, anlage_kwp=10, jahresverbrauch_kwh=3000, profiltyp="haushalt")
+    _anmelden(c, "abnehmer", 2)
+    r = c.post("/verwaltung/gruppe", data={"erzeuger_id": 1, "abnehmer_ids": "2"}, auth=auth, follow_redirects=False)
+    gid = int(r.headers["location"].rsplit("/", 1)[1])
+    c.post(f"/verwaltung/gruppe/{gid}", auth=auth, data={"status": "aktiv", "preis_ct_kwh": 10, "ust_satz": 0,
+                                                         "rechnung_monatlich": "true", "gebuehr_ct_kwh": 1.5})
+    with Session(engine) as s:
+        zeiten = ed.viertelstunden(date(2026, 6, 1), date(2026, 6, 30))
+        spuren = ed.simulieren(s.get(Teilnehmer, 1), [s.get(Teilnehmer, 2)], zeiten)
+    c.post("/verwaltung/energiedaten", auth=auth, files=[("dateien", ("juni.xlsx", ed.export_schreiben(spuren, zeiten, "X")))])
+    seite = c.post(f"/verwaltung/gruppe/{gid}/abrechnungslauf", auth=auth, data={"von": "2026-06-01", "bis": "2026-06-30"}).text
+    assert "1 Rechnung(en) erstellt" in seite and "Servicegebühr" in seite
+    with Session(engine) as s:
+        x = s.exec(select(main.Gebuehr)).one()
+        r = s.exec(select(Rechnung)).one()
+    assert x.kwh == pytest.approx(r.kwh, abs=0.01) and x.netto == pytest.approx(round(r.kwh * 0.015, 2), abs=0.01)
+    assert x.empfaenger_id == 1 and x.brutto == pytest.approx(round(x.netto * 1.2, 2), abs=0.01)
+    assert "Servicegebühr" in c.get("/verwaltung/postausgang", auth=auth).text
+
+
+# ---------------------------------------------------------------- Anfragen und Wunschnachbar
+
+def test_anfragen_und_gea_aus_anfrage(client):
+    c, engine = client
+    auth = ("admin", "test")
+    daten = {"vorname": "Nora", "nachname": "Test", "email": "n@example.com", "strasse": "Weg 1", "plz": "6800",
+             "ort": "Feldkirch", "wohnungen": 6, "anlage_kwp": 15, "registriert": "nein", "modell": "verwaltet"}
+    assert "Bitte bestätigen" in c.post("/gea", data=daten).text
+    assert "Danke, Nora" in c.post("/gea", data={**daten, "einwilligung": "true"}).text
+    assert "Danke, Otto" in c.post("/anfrage", data={"vorname": "Otto", "nachname": "X", "email": "o@example.com",
+                                                    "nachricht": "Frage?", "einwilligung": "true"}).text
+    seite = c.get("/verwaltung/anfragen", auth=auth).text
+    assert "GEA-Anfrage" in seite and "Frage?" in seite
+    aid = int(re.search(r"/verwaltung/gea/neu\?anfrage=(\d+)", seite).group(1))
+    formular = c.get(f"/verwaltung/gea/neu?anfrage={aid}", auth=auth).text
+    assert 'value="n@example.com"' in formular and "GEA Weg 1, Feldkirch" in formular
+    r = c.post("/verwaltung/gea/neu", auth=auth, follow_redirects=False,
+               data={"anfrage_id": aid, "name": "GEA Weg 1", "email": "n@example.com", "modell": "verwaltet",
+                     "aufteilung": "dynamisch", "status": "vorschlag"})
+    gid = int(r.headers["location"].rsplit("/", 1)[1])
+    with Session(engine) as s:
+        a = s.get(main.Anfrage, aid)
+        assert a.gruppe_id == gid and a.status == "in_bearbeitung"
+    assert "noch nicht eingetragen" in c.get(f"/verwaltung/gea/{gid}", auth=auth).text or \
+        "Zählpunkt der Anlage ist noch nicht eingetragen" in c.get(f"/verwaltung/gea/{gid}", auth=auth).text
+
+
+def test_abnehmer_laedt_wunschnachbarn_ein(client):
+    c, engine = client
+    r = _anmelden(c, "abnehmer", 2, wunschpartner="Herr Sonne, Weg 3")
+    danke = c.get(r.headers["location"]).text
+    token = re.search(r"einladung=([\w-]+)", danke).group(1)
+    formular = c.get(f"/anmelden?einladung={token}").text
+    assert 'name="rolle" value="erzeuger"' in formular  # Eingeladener ist der Erzeuger
+    _anmelden(c, "erzeuger", 1, einladung=token, anlage_kwp=10, jahresverbrauch_kwh=3000, profiltyp="haushalt")
+    _anmelden(c, "abnehmer", 3)
+    seite = c.get("/verwaltung/matching", auth=("admin", "test")).text
+    ids = re.search(r'name="abnehmer_ids" value="([\d,]+)"', seite).group(1)
+    # Teilnehmer 1 ist der einladende Abnehmer, er steht vor dem fremden Abnehmer 3
+    assert ids.split(",")[0] == "1" and "eingeladen" in seite and "Herr Sonne" in seite
