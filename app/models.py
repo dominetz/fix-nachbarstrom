@@ -206,16 +206,19 @@ class Nachricht(SQLModel, table=True):
 
 
 class Messwert(SQLModel, table=True):
-    """Viertelstundenwert eines Zählpunkts aus dem EDA-Export (kWh).
+    """Viertelstundenwert eines Zählpunkts aus dem EDA-Export (kWh), oder die Summe eines
+    Zeitraums (z. B. Monat) aus dem EDA-Energiedatenreport.
 
     beginn ist der Beginn der Viertelstunde als Text "JJJJ-MM-TT HH:MM" (Ortszeit),
-    damit nach Monat und Tag einfach summiert werden kann. gruppe_id trennt die Werte,
+    damit nach Monat und Tag einfach summiert werden kann. ende ist nur bei Summen gesetzt
+    (ausschließlich, z. B. "2026-11-01 00:00" für Oktober). gruppe_id trennt die Werte,
     wenn ein Zählpunkt in mehreren Gemeinschaften ist (z. B. GEA und P2P).
     """
     id: Optional[int] = Field(default=None, primary_key=True)
     gruppe_id: Optional[int] = Field(default=None, index=True)
     zaehlpunkt: str = Field(index=True)
     beginn: str = Field(index=True)
+    ende: Optional[str] = None
     verbrauch: float = 0.0  # Gesamtverbrauch lt. Messung
     anteil: float = 0.0  # zugeteilter Anteil an der gemeinsamen Erzeugung
     eigendeckung: float = 0.0  # davon tatsächlich verbraucht (wird verrechnet)

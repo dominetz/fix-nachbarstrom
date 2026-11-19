@@ -13,6 +13,12 @@ aus festen Zellen, sondern sucht:
   mit einer Wertespalte),
 * die Messgröße über Stichworte im Titel, die Einheit (kWh, Wh, MWh) ebenso.
 
+Zusätzlich gibt es den EDA-Energiedatenreport („Gesamtübersicht“ und
+„Detailübersicht“): eine Zeile je Zählpunkt und Zeitraum (z. B. Monat) mit
+Summen, dazu EC-ID und Stammdaten. Er wird an der Kopfzeile mit „Zählpunktnummer“
+und „Zeitraum“ erkannt. Werte für einen Zeitraum bekommen ein Ende (`ende`),
+Viertelstundenwerte nicht.
+
 Was sich nicht eindeutig zuordnen lässt, wird nicht geraten, sondern unter
 `unbekannt` gemeldet. Die Plattform fragt dann einmal nach und merkt sich die
 Zuordnung für alle weiteren Exporte.
@@ -62,7 +68,7 @@ class Spalte:
 
 @dataclass
 class Import:
-    werte: list[dict]  # je Zeitpunkt und Zählpunkt: zaehlpunkt, beginn und die FELDER
+    werte: list[dict]  # je Zeitpunkt und Zählpunkt: zaehlpunkt, beginn, ende (nur bei Summen) und die FELDER
     zaehlpunkte: set[str]
     von: datetime | None
     bis: datetime | None
@@ -72,6 +78,8 @@ class Import:
     aufbau: str = ""
     intervall: int | None = None  # Minuten
     hinweise: list[str] = field(default_factory=list)
+    stammdaten: dict[str, dict[str, str]] = field(default_factory=dict)  # Zählpunkt -> Name, Adresse, Bezeichnung
+    summen: bool = False  # Summen je Zeitraum (Energiedatenreport) statt Viertelstunden
 
     @property
     def erzeuger(self) -> set[str]:
@@ -99,6 +107,13 @@ def feld_aus_titel(titel: str, zuordnung: dict[str, str] | None = None) -> str |
         return None
     if "qualit" in t or t in ("status", "flag", "einheit", "unit") or "ersatzwert" in t:
         return IGNORIEREN
+    if "gemeinschaftsueberschuss" in t or "ueberschusserzeugung" in t or "erneuerbar" in t:
+        return IGNORIEREN  # Summe der Gemeinschaft bzw. Teilmenge der Eigendeckung, nicht je Zählpunkt nötig
+    if "abrechnungsrelevant" in t:  # Gesamtübersicht des Energiedatenreports
+        if "verbrauch" in t:
+            return "eigendeckung"
+        if "erzeugung" in t:
+            return "erzeugung"
     if "eigendeckung" in t:
         return "eigendeckung"
     if "restueberschuss" in t or ("rest" in t and "ueberschuss" in t):
@@ -112,6 +127,25 @@ def feld_aus_titel(titel: str, zuordnung: dict[str, str] | None = None) -> str |
     if re.search(r"\b(summe|total)\b", t):  # Summenspalte ohne Messgröße
         return IGNORIEREN
     return None
+
+
+def _nachrangig(titel: str) -> int:
+    """Zweite Spalte für dieselbe Messgröße, z. B. „… entsprechend dem Teilnahmefaktor“."""
+    t = schluessel(titel)
+    return int("teilnahmefaktor" in t or "abrechnungsrelevant" in t)
+
+
+def _doppelte_weglassen(spalten: list["Spalte"]) -> None:
+    """Je Zählpunkt und Messgröße nur eine Spalte verwenden, sonst würde doppelt gezählt."""
+    beste: dict = {}
+    for s in spalten:
+        if s.feld in FELDER:
+            k = (s.zaehlpunkt, s.feld)
+            if k not in beste or _nachrangig(s.titel) < _nachrangig(beste[k].titel):
+                beste[k] = s
+    for s in spalten:
+        if s.feld in FELDER and beste[(s.zaehlpunkt, s.feld)] is not s:
+            s.feld = IGNORIEREN
 
 
 def _faktor(titel: str) -> float:
@@ -258,6 +292,9 @@ def _kuerzen(zeile: list) -> list:
 def einlesen(inhalt: bytes, zuordnung: dict[str, str] | None = None, dateiname: str = "") -> Import:
     """Export lesen. zuordnung: gemerkte Titel -> Feld (oder IGNORIEREN)."""
     alle = tabellen(inhalt, dateiname)
+    if bericht := _bericht(alle, zuordnung):
+        bericht.gemeinschafts_id = _gemeinschafts_id(alle, bericht.zaehlpunkte, dateiname)
+        return bericht
     beste = None
     for name, zeilen in alle:
         start, anzahl = None, 0
@@ -343,6 +380,7 @@ def _breit(kopf: list[list], daten: list[list], zeitspalten: set[int], zuordnung
         probe = [z[s.index] for z in daten[:96] if s.index < len(z) and z[s.index] not in (None, "")]
         if probe and sum(_ist_zahl(w) for w in probe) < len(probe) / 2:
             s.feld = IGNORIEREN
+    _doppelte_weglassen(spalten)
     return _sammeln(daten, zeitspalten, [(s, None) for s in spalten])
 
 
@@ -370,6 +408,7 @@ def _lang(kopf: list[list], daten: list[list], zeitspalten: set[int], zp_spalte:
                         je_zeile=True)
     spalten = [Spalte(c, titel[c], None, None, feld_aus_titel(titel[c], zuordnung), _faktor(titel[c]))
                for c in zahlen]
+    _doppelte_weglassen(spalten)
     return _sammeln(daten, zeitspalten, [(s, None) for s in spalten], zp_spalte=zp_spalte,
                     richtung_spalte=richtung_spalte)
 
@@ -441,7 +480,180 @@ def _sammeln(daten: list[list], zeitspalten: set[int], spalten: list[tuple[Spalt
     return Import(werte, gesehen, von, bis, richtung=richtung, unbekannt=unbekannt)
 
 
-_ID_TEXT = re.compile(r"\bAT[0-9]{2}[0-9A-Z]{16,40}\b")
+# ---------------------------------------------------------------- EDA-Energiedatenreport
+
+_STAMM = {"wohnung": ("zaehlpunktbezeichnung",), "vorname": ("vorname",), "nachname": ("nachname", "name"),
+          "strasse": ("strasse",), "hausnr": ("hausnr.", "hausnr", "hausnummer"), "plz": ("plz",),
+          "ort": ("stadt", "ort")}
+_META = {"jahr", "monat", *(n for namen in _STAMM.values() for n in namen)}
+
+
+def _kopfzeile(zeilen: list[list]) -> tuple[int, list[str], int] | None:
+    """Kopfzeile des Energiedatenreports: Zählpunktnummer und Zeitraum, keine Messcode-Spalte."""
+    for nr, z in enumerate(zeilen[:40]):
+        titel = [schluessel(_text(w)) for w in z]
+        zp = next((i for i, t in enumerate(titel) if _ZP_SPALTE.search(t) and "bezeichnung" not in t), None)
+        if zp is not None and any(t.startswith("zeitraum") for t in titel):
+            if any(_CODE_SPALTE.search(t) for t in titel if not t.startswith("zeitraum")):
+                return None  # lange Tabelle mit Messcodes, nicht der Bericht
+            return nr, titel, zp
+    return None
+
+
+def _bericht(alle: list[tuple[str, list[list]]], zuordnung) -> Import | None:
+    funde = [(name, zeilen, *k) for name, zeilen in alle if (k := _kopfzeile(zeilen))]
+    if not funde:
+        return None
+    # Werte aus der Detailübersicht (Zeitraum von/bis, je Monat), sonst aus der Gesamtübersicht
+    funde.sort(key=lambda f: 0 if "zeitraum von" in f[3] else 1)
+    name, zeilen, nr, titel, zp_c = funde[0]
+    imp = _bericht_werte(zeilen, nr, titel, zp_c, zuordnung)
+    imp.aufbau = f"EDA-Energiedatenreport, Blatt „{name}“, Summen je Zählpunkt und Zeitraum"
+    for _, z, n, ti, zc in funde:
+        for zp, daten in _stammdaten(z, n, ti, zc).items():
+            ziel = imp.stammdaten.setdefault(zp, {})
+            for k, v in daten.items():
+                ziel.setdefault(k, v)
+    return imp
+
+
+def _zeitraum(z: list, von_c: int | None, bis_c: int | None, zr_c: int | None) -> tuple[datetime | None, datetime | None]:
+    """Beginn und Ende (ausschließlich) einer Berichtszeile. Ein Datum ohne Uhrzeit beim Ende
+    schließt den ganzen Tag ein."""
+    zelle = lambda c: z[c] if c is not None and c < len(z) else None  # noqa: E731
+    if zr_c is not None:
+        teile = re.findall(r"\d{1,2}\.\d{1,2}\.\d{4}", _text(zelle(zr_c)))
+        roh_von, roh_bis = (teile[0], teile[-1]) if teile else (None, None)
+    else:
+        roh_von, roh_bis = zelle(von_c), zelle(bis_c)
+    von, bis = _zeit(roh_von), _zeit(roh_bis)
+    if not von:
+        return None, None
+    if not bis:
+        roh_bis, bis = roh_von, von
+
+    def nur_datum(roh, zeit):
+        return zeit.time() == time(0) and not (isinstance(roh, str) and ":" in roh)
+
+    if nur_datum(roh_von, von) and nur_datum(roh_bis, bis):
+        return von, datetime.combine(bis.date() + timedelta(days=1), time(0))
+    return von, bis
+
+
+def _bericht_werte(zeilen: list[list], nr: int, titel: list[str], zp_c: int, zuordnung) -> Import:
+    def spalte(*namen):
+        return next((i for i, t in enumerate(titel) if t in namen), None)
+
+    von_c, bis_c = spalte("zeitraum von", "von"), spalte("zeitraum bis", "bis")
+    zr_c = spalte("zeitraum", "teilnahmezeitraum") if von_c is None else None
+    richt_c = next((i for i, t in enumerate(titel) if "richtung" in t), None)
+    status_c = [i for i, t in enumerate(titel) if "uebermittlung" in t or t.startswith("status")]
+    quali_c = [i for i, t in enumerate(titel) if "qualitaet" in t]
+    meta = {zp_c, von_c, bis_c, zr_c, richt_c, *status_c, *quali_c} | {i for i, t in enumerate(titel) if t in _META}
+    daten = [z for z in zeilen[nr + 1:] if zp_c < len(z) and _zp_in(z[zp_c])]
+    if not daten:
+        raise ValueError("Im Energiedatenreport stehen keine Zählpunkte.")
+    spalten: list[Spalte] = []
+    for c in range(max(len(z) for z in daten)):
+        if c in meta:
+            continue
+        t = _text(zeilen[nr][c]) if c < len(zeilen[nr]) else ""
+        werte = [z[c] for z in daten if c < len(z) and z[c] not in (None, "")]
+        if not t and not werte:
+            continue
+        if werte and sum(_ist_zahl(w) for w in werte) < len(werte) / 2:
+            continue  # Text, z. B. Bemerkung
+        spalten.append(Spalte(c, t, None, None, feld_aus_titel(t, zuordnung), _faktor(t)))
+    _doppelte_weglassen(spalten)
+
+    ergebnis: dict[tuple[str, str], dict] = {}
+    unbekannt: dict[str, list[str]] = {}
+    richtung: dict[str, str] = {}
+    gesehen: set[str] = set()
+    unvollstaendig: set[str] = set()
+    l3: set[str] = set()
+    ueber_monate = False
+    anfang = schluss = None
+    for z in daten:
+        zp = _zp_in(z[zp_c])
+        beginn, ende = _zeitraum(z, von_c, bis_c, zr_c)
+        if not beginn:
+            continue
+        gesehen.add(zp)
+        anfang = beginn if anfang is None or beginn < anfang else anfang
+        schluss = ende if schluss is None or ende > schluss else schluss
+        viertelstunde = ende - beginn == timedelta(minutes=15)
+        letzter_tag = ende - timedelta(minutes=1)
+        ueber_monate |= (beginn.year, beginn.month) != (letzter_tag.year, letzter_tag.month)
+        if richt_c is not None and richt_c < len(z) and (r := _RICHTUNG.get(_text(z[richt_c]).upper())):
+            richtung[zp] = r
+        if any("unvollst" in _text(z[c]).lower() for c in status_c if c < len(z)):
+            unvollstaendig.add(zp)
+        if any(_text(z[c]).upper() == "L3" for c in quali_c if c < len(z)):
+            l3.add(zp)
+        schl = beginn.strftime(ZEITFORMAT)
+        ziel = ergebnis.setdefault((zp, schl), {"zaehlpunkt": zp, "beginn": schl,
+                                                "ende": None if viertelstunde else ende.strftime(ZEITFORMAT),
+                                                **dict.fromkeys(FELDER, 0.0)})
+        for s in spalten:
+            roh = z[s.index] if s.index < len(z) else None
+            if s.feld is None:
+                liste = unbekannt.setdefault(s.titel or "(ohne Titel)", [])
+                if len(liste) < 3 and _ist_zahl(roh) and _zahl(roh) != 0:
+                    liste.append(_text(roh))
+                continue
+            if s.feld == IGNORIEREN:
+                continue
+            try:
+                wert = _zahl(roh)
+            except ValueError:
+                continue
+            if wert is not None:
+                ziel[s.feld] += wert * s.faktor
+    if anfang is None:
+        raise ValueError("Im Energiedatenreport fehlt der Zeitraum je Zeile.")
+    for liste in unbekannt.values():
+        if not liste:
+            liste.append("0")
+    werte = list(ergebnis.values())
+    for w in werte:
+        for f in FELDER:
+            w[f] = round(w[f], 6)
+    summen = any(w["ende"] for w in werte)
+    imp = Import(werte, gesehen, anfang, schluss - timedelta(minutes=15), richtung=richtung, unbekannt=unbekannt,
+                 intervall=None if summen else 15, summen=summen)
+    if summen:
+        imp.hinweise.append("Der Bericht enthält Summen je Zeitraum (keine Viertelstunden). Das reicht für "
+                            "Abrechnung und Monatswerte, einen Tagesverlauf gibt es damit nicht.")
+    if ueber_monate and summen:
+        imp.hinweise.append("Mindestens ein Zeitraum geht über mehrere Monate. Die Menge zählt dann zum ersten "
+                            "Monat. Für Monatswerte den Bericht mit einer Zeile je Monat (Detailübersicht) verwenden.")
+    if unvollstaendig:
+        imp.hinweise.append(f"Die EDA meldet für {len(unvollstaendig)} Zählpunkt(e) unvollständige Daten. "
+                            "Diese Werte vor der Abrechnung prüfen.")
+    if l3:
+        imp.hinweise.append(f"{len(l3)} Zählpunkt(e) haben Datenqualität L3 (laut Bericht nicht abrechnungsrelevant).")
+    return imp
+
+
+def _stammdaten(zeilen: list[list], nr: int, titel: list[str], zp_c: int) -> dict[str, dict[str, str]]:
+    """Name, Adresse und Bezeichnung je Zählpunkt, so wie sie im EDA-Portal stehen."""
+    spalten = {k: next((i for i, t in enumerate(titel) if t in namen), None) for k, namen in _STAMM.items()}
+    ergebnis: dict[str, dict[str, str]] = {}
+    for z in zeilen[nr + 1:]:
+        zp = _zp_in(z[zp_c]) if zp_c < len(z) else None
+        if not zp:
+            continue
+        d = {k: _text(z[c]) for k, c in spalten.items() if c is not None and c < len(z) and _text(z[c])}
+        if d.get("hausnr"):
+            d["strasse"] = f"{d.get('strasse', '')} {d.pop('hausnr')}".strip()
+        ziel = ergebnis.setdefault(zp, {})
+        for k, v in d.items():
+            ziel.setdefault(k, v)
+    return {zp: d for zp, d in ergebnis.items() if d}
+
+
+_ID_TEXT = re.compile(r"\bAT(?=[0-9A-Z]*[0-9]{4})[0-9A-Z]{18,40}\b")
 _ID_LABEL = re.compile(r"gemeinschaft|community|ec-?id|\bGEA\b|\bEEG\b|\bBEG\b", re.I)
 
 
@@ -459,10 +671,11 @@ def _gemeinschafts_id(alle: list[tuple[str, list[list]]], zaehlpunkte: set[str],
         return [m.group(0) for m in _ID_TEXT.finditer(_text(text).upper()) if m.group(0) not in ausser]
 
     for _, zeilen in alle:  # zuerst neben einer Beschriftung, die Kennung kann wie ein Zählpunkt aussehen
-        for z in zeilen[:30]:
+        for r, z in enumerate(zeilen[:30]):
             for i, w in enumerate(z[:12]):
                 if isinstance(w, str) and _ID_LABEL.search(w):
-                    for nachbar in z[i:i + 3]:
+                    darunter = [zeilen[r + 1][i]] if r + 1 < len(zeilen) and i < len(zeilen[r + 1]) else []
+                    for nachbar in [*z[i:i + 3], *darunter]:
                         if gefunden := ids(nachbar, zaehlpunkte):
                             return gefunden[0]
     kandidaten: list[str] = []
@@ -504,7 +717,7 @@ def aufbau_bericht(inhalt: bytes, dateiname: str = "", zeilen: int = 14, spalten
             return wert.strftime("%d.%m.%Y %H:%M")
         t = _text(wert)
         if isinstance(wert, str):
-            t = re.sub(r"AT[0-9][0-9A-Z]{9,45}", ersetzen, re.sub(r"(?<=[0-9A-Z])[ .](?=[0-9A-Z]{3})", "", t)
+            t = re.sub(r"AT(?=[0-9A-Z]*[0-9]{4})[0-9A-Z]{10,45}", ersetzen, re.sub(r"(?<=[0-9A-Z])[ .](?=[0-9A-Z]{3})", "", t)
                        if _ID_TEXT.search(_norm_zp(t)) else t)
             if not _TECHNISCH.search(t.replace("[Nummer", "")) and "[Nummer" not in t:
                 t = "[Text]"

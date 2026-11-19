@@ -1,6 +1,6 @@
 import os
 import re
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 os.environ["NACHBARSTROM_DB"] = "sqlite:///:memory:"
 os.environ["NACHBARSTROM_ADMIN_PASSWORD"] = "test"
@@ -665,3 +665,147 @@ def test_abnehmer_laedt_wunschnachbarn_ein(client):
     ids = re.search(r'name="abnehmer_ids" value="([\d,]+)"', seite).group(1)
     # Teilnehmer 1 ist der einladende Abnehmer, er steht vor dem fremden Abnehmer 3
     assert ids.split(",")[0] == "1" and "eingeladen" in seite and "Herr Sonne" in seite
+
+
+# ---------------------------------------------------------------- EDA-Energiedatenreport (Monatssummen)
+
+EC_ID = "ATCC0000TESTGEA000000000000000001"  # erfunden, Aufbau wie im Bericht: Buchstaben nach AT
+
+
+def _energiedatenreport(monate=((2026, 10),), wohnungen=(51, 52), anlage=50, unvollstaendig=False):
+    """Nachbau des EDA-Energiedatenreports mit erfundenen Zählpunkten und Namen."""
+    import calendar
+    import io
+    from openpyxl import Workbook
+    wb = Workbook()
+    gesamt = wb.active
+    gesamt.title = "Gesamtübersicht"
+    detail = wb.create_sheet("Detailübersicht")
+    erster, letzter = monate[0], monate[-1]
+    von = f"01.{erster[1]:02d}.{erster[0]}"
+    bis = f"{calendar.monthrange(*letzter)[1]:02d}.{letzter[1]:02d}.{letzter[0]}"
+    for ws in (gesamt, detail):
+        ws.append(["EC-ID", None, "Bezeichnung"])
+        ws.append([EC_ID, None, "TEST01"])
+        ws.append([None, None, None, None, "Unvollständige Daten? Erklärungen zum Energiedatenreport finden Sie hier."])
+        ws.append(["Auswertungszeitraum von", von])
+        ws.append(["Auswertungszeitraum bis", bis])
+        ws.merge_cells("A2:B2")
+    gesamt.append(["Zählpunktbezeichnung", "Zählpunktnummer", "Energierichtung", "Zeitraum",
+                   "Verbrauch, abrechnungsrelevante Energiemenge", "Erzeugung, abrechnungsrelevante Energiemenge",
+                   "Status Datenübermittlung", "Datenqualität", "Vorname", "Nachname", "Straße", "Hausnr.", "PLZ", "Stadt"])
+    gesamt.append(["Bezeichnung so wie im EDA Portal", "Eindeutige Identifikationsnummer des Zählpunkts"])
+    detail.append(["Zählpunktbezeichnung", "Zählpunktnummer", "Energierichtung", "Jahr", "Monat", "Zeitraum von",
+                   "Zeitraum bis", "Gesamtverbrauch lt. Messung (bei Teilnahme gem. Erzeugung) [KWH]",
+                   "Verbrauch lt. Messung entsprechend dem Teilnahmefaktor je ZP und EC-ID [KWH]",
+                   "Anteil gemeinschaftliche Erzeugung [KWH]", "Eigendeckung gemeinschaftliche Erzeugung [KWH]",
+                   "Eigendeckung aus erneuerbarer Energie [KWH]", "Gesamte gemeinschaftliche Erzeugung [KWH]",
+                   "Erzeugung lt. Messung entsprechend dem Teilnahmefaktor und EC-ID [KWH]",
+                   "Gesamt/Überschusserzeugung, Gemeinschaftsüberschuss [KWH]", "Restüberschuss bei EG und je ZP [KWH]",
+                   "Datenübermittlung", "Datenqualität"])
+    detail.append([None, None, None, None, None, None, None, "Summe der Energiedaten"])
+    detail.append([None, None, None, None, None, von, bis, 999, 999, 999, 999, 999, 999, 999, None, 999, "Vollständig", "L1"])
+    detail.append([None, None, None, None, None, None, None, "Energiedaten je Zählpunkt"])
+    erwartet = {}
+    for j, m in monate:
+        tage = calendar.monthrange(j, m)[1]
+        a, b = f"01.{m:02d}.{j}", f"{tage:02d}.{m:02d}.{j}"
+        summe_eigen = 0
+        for i, n in enumerate(wohnungen):
+            verbrauch, eigen = 200 + 10 * i + m, 40 + 5 * i + m / 10
+            summe_eigen += eigen
+            erwartet[(zp(n), m)] = eigen
+            status = "Unvollständig" if unvollstaendig and i == 0 else "Vollständig"
+            # Teilnahmefaktor-Spalte und „erneuerbar“ absichtlich anders, sie dürfen nicht mitzählen
+            detail.append([f"Top {i + 1}", zp(n), "VERBRAUCH", j, m, a, b, verbrauch, verbrauch / 2, 400, eigen,
+                           eigen / 2, None, None, None, None, status, "L1"])
+        detail.append(["PV Dach", zp(anlage), "ERZEUGUNG", j, m, a, b, None, None, None, None, None, 400, 380, 5,
+                       400 - summe_eigen, "Vollständig", "L1"])
+    for i, n in enumerate(wohnungen):
+        gesamt.append([f"Top {i + 1}", zp(n), "VERBRAUCH", f"{von}-{bis}", 50.5, None, "Vollständig", "L1",
+                       f"Vor{i}", f"Nach{i}", "Testgasse", str(i + 1), "6800", "Teststadt"])
+    gesamt.append(["PV Dach", zp(anlage), "ERZEUGUNG", f"{von}-{bis}", None, 400.0, "Vollständig", "L1",
+                   "Bea", "Betreiberin", "Testgasse", "9", "6800", "Teststadt"])
+    puffer = io.BytesIO()
+    wb.save(puffer)
+    return puffer.getvalue(), erwartet
+
+
+def test_energiedatenreport_einlesen():
+    from app import eda_import as ei
+    datei, erwartet = _energiedatenreport(monate=((2026, 9), (2026, 10)), unvollstaendig=True)
+    imp = ei.einlesen(datei)
+    assert imp.summen and imp.intervall is None and not imp.unbekannt
+    assert imp.gemeinschafts_id == EC_ID  # steht unter der Beschriftung „EC-ID“
+    assert imp.zaehlpunkte == {zp(50), zp(51), zp(52)} and imp.erzeuger == {zp(50)}
+    assert len(imp.werte) == 6 and all(w["ende"] for w in imp.werte)  # Summenzeile ohne Zählpunkt nicht dabei
+    okt = {w["zaehlpunkt"]: w for w in imp.werte if w["beginn"] == "2026-10-01 00:00"}
+    assert okt[zp(51)]["ende"] == "2026-11-01 00:00"
+    assert okt[zp(51)]["verbrauch"] == 210 and okt[zp(51)]["eigendeckung"] == pytest.approx(erwartet[(zp(51), 10)])
+    assert okt[zp(50)]["erzeugung"] == 400 and okt[zp(50)]["restueberschuss"] == pytest.approx(
+        400 - erwartet[(zp(51), 10)] - erwartet[(zp(52), 10)])
+    assert imp.von == datetime(2026, 9, 1) and imp.bis == datetime(2026, 10, 31, 23, 45)
+    assert imp.stammdaten[zp(51)] == {"wohnung": "Top 1", "vorname": "Vor0", "nachname": "Nach0",
+                                      "strasse": "Testgasse 1", "plz": "6800", "ort": "Teststadt"}
+    assert any("unvollständige Daten" in h for h in imp.hinweise)
+    assert any("keine Viertelstunden" in h for h in imp.hinweise)
+    bericht = ei.aufbau_bericht(datei)
+    assert EC_ID not in bericht and zp(51) not in bericht and "Vor0" not in bericht
+
+
+def test_energiedatenreport_nur_gesamtuebersicht():
+    import io
+    from openpyxl import load_workbook
+    from app import eda_import as ei
+    datei, _ = _energiedatenreport()
+    wb = load_workbook(io.BytesIO(datei))
+    del wb["Detailübersicht"]
+    puffer = io.BytesIO()
+    wb.save(puffer)
+    imp = ei.einlesen(puffer.getvalue())
+    werte = {w["zaehlpunkt"]: w for w in imp.werte}
+    assert werte[zp(51)]["eigendeckung"] == 50.5 and werte[zp(50)]["erzeugung"] == 400
+    assert werte[zp(51)]["beginn"] == "2026-10-01 00:00" and werte[zp(51)]["ende"] == "2026-11-01 00:00"
+
+
+def test_gea_aus_energiedatenreport(client):
+    from app import auswertung as aw
+    c, engine = client
+    auth = ("admin", "test")
+    datei, erwartet = _energiedatenreport(monate=((2026, 9), (2026, 10)))
+    r = _gea_anlegen(c, datei, vorname="", nachname="", email="")
+    gid = int(r.headers["location"].rsplit("/", 1)[1])
+    with Session(engine) as s:
+        g = s.get(Gruppe, gid)
+        betreiber = s.get(Teilnehmer, g.erzeuger_id)
+        assert g.gemeinschafts_id == EC_ID and betreiber.zaehlpunkt == zp(50)
+        assert betreiber.nachname == "Betreiberin" and betreiber.strasse == "Testgasse 9" and not betreiber.wohnung
+        wohnungen = sorted(t.name for _, t in main.importe.mitglieder(s, g))
+        assert wohnungen == ["Top 1, Vor0 Nach0", "Top 2, Vor1 Nach1"]
+        assert aw.letzter_tag(s, [zp(51)], gid) == date(2026, 10, 31)
+        assert aw.abdeckung(s)[(gid, zp(51))] == {"2026-09": 30, "2026-10": 31}
+        assert not aw.hat_viertelstunden(s, [zp(50), zp(51)], gid)
+    seite = c.get(f"/verwaltung/gea/{gid}", auth=auth).text
+    assert "Monatssummen aus dem EDA-Energiedatenreport" in seite and "Okt 26" in seite
+    # Abrechnung Oktober: nur die Servicegebühr, Menge = Eigendeckung beider Wohnungen im Oktober
+    seite = c.post(f"/verwaltung/gruppe/{gid}/abrechnungslauf", auth=auth,
+                   data={"von": "2026-10-01", "bis": "2026-10-31"}).text
+    assert "fehlen" not in seite
+    with Session(engine) as s:
+        gebuehr = s.exec(select(main.Gebuehr)).one()
+    assert gebuehr.kwh == pytest.approx(erwartet[(zp(51), 10)] + erwartet[(zp(52), 10)])
+    # Derselbe Bericht nochmal über Energiedaten: wird erkannt, ersetzt, nichts doppelt
+    seite = c.post("/verwaltung/energiedaten", auth=auth, files=[("dateien", ("bericht.xlsx", datei))]).text
+    assert "über die Gemeinschafts-ID" in seite
+    with Session(engine) as s:
+        assert len(s.exec(select(main.Messwert)).all()) == 6
+        # Viertelstundenwerte für Oktober ersetzen die Monatssumme
+        from app import energiedaten as ed
+        zeiten = ed.viertelstunden(date(2026, 10, 1), date(2026, 10, 31))
+        spuren = ed.simulieren(s.get(Teilnehmer, g.erzeuger_id), [s.get(Teilnehmer, t.id) for _, t in
+                                                                  main.importe.mitglieder(s, g)], zeiten)
+    c.post("/verwaltung/energiedaten", auth=auth, files=[("dateien", ("okt.xlsx", ed.export_schreiben(spuren, zeiten, EC_ID)))])
+    with Session(engine) as s:
+        okt = s.exec(select(main.Messwert).where(main.Messwert.beginn >= "2026-10-01")).all()
+        assert okt and all(m.ende is None for m in okt)
+        assert aw.hat_viertelstunden(s, [zp(51)], gid)

@@ -65,15 +65,29 @@ def ziel_finden(s: Session, imp: Import) -> tuple[Gruppe | None, str]:
     return None, "mehrere passen" if treffer else "keine passt"
 
 
-def wohnung_anlegen(s: Session, g: Gruppe, zp: str, bezeichnung: str | None = None) -> Teilnehmer:
-    """Zählpunkt als Wohnung in eine GEA aufnehmen (Name und Mail trägt man später nach)."""
+def stammdaten_ergaenzen(t: Teilnehmer, stamm: dict[str, str] | None) -> None:
+    """Leere Felder mit den Stammdaten aus dem EDA-Bericht füllen. Eingetragenes bleibt.
+    Die Bezeichnung aus dem EDA-Portal wird nur bei Wohnungen zur Wohnungsbezeichnung."""
+    felder = ("vorname", "nachname", "strasse", "plz", "ort") + (("wohnung",) if t.rolle == Rolle.ABNEHMER else ())
+    for feld in felder:
+        if stamm and stamm.get(feld) and not getattr(t, feld):
+            setattr(t, feld, stamm[feld])
+
+
+def wohnung_anlegen(s: Session, g: Gruppe, zp: str, bezeichnung: str | None = None,
+                    stamm: dict[str, str] | None = None) -> Teilnehmer:
+    """Zählpunkt als Wohnung in eine GEA aufnehmen (Name und Mail trägt man später nach,
+    sofern sie nicht in den Stammdaten des Exports stehen)."""
     t = s.exec(select(Teilnehmer).where(Teilnehmer.zaehlpunkt == zp)).first()
     if not t:
         betreiber = s.get(Teilnehmer, g.erzeuger_id)
         nummer = len(mitglieder(s, g)) + 1
-        t = Teilnehmer(rolle=Rolle.ABNEHMER, vorname="", nachname="", wohnung=bezeichnung or f"Wohnung {nummer}",
-                       strasse=betreiber.strasse, plz=betreiber.plz, ort=betreiber.ort, email="",
+        t = Teilnehmer(rolle=Rolle.ABNEHMER, vorname="", nachname="",
+                       wohnung=(stamm or {}).get("wohnung") or bezeichnung or f"Wohnung {nummer}",
+                       strasse="", plz="", ort="", email="",
                        zaehlpunkt=zp, netzbetreiber=zp[2:8], profiltyp=Profiltyp.HAUSHALT)
+        stammdaten_ergaenzen(t, stamm)
+        t.strasse, t.plz, t.ort = t.strasse or betreiber.strasse, t.plz or betreiber.plz, t.ort or betreiber.ort
         s.add(t)
         s.flush()
     if not s.exec(select(Mitglied).where(Mitglied.gruppe_id == g.id, Mitglied.teilnehmer_id == t.id)).first():
@@ -91,14 +105,18 @@ def speichern(s: Session, g: Gruppe, imp: Import, neue_aufnehmen: bool | None = 
         for zp in sorted(imp.zaehlpunkte - set(bekannt)):
             if zp in imp.erzeuger and g.art == Art.GEA:
                 continue  # zweite Anlage: nicht als Wohnung führen
-            t = wohnung_anlegen(s, g, zp)
+            t = wohnung_anlegen(s, g, zp, stamm=imp.stammdaten.get(zp))
             bekannt[zp] = t
             neu.append(t.name)
+    for zp, t in bekannt.items():  # GEA: fehlende Namen aus den EDA-Stammdaten nachtragen
+        if g.art == Art.GEA and zp in imp.stammdaten:
+            stammdaten_ergaenzen(t, imp.stammdaten[zp])
+            s.add(t)
     zps = imp.zaehlpunkte & set(bekannt)
     von, bis = imp.von.strftime(ZEITFORMAT), imp.bis.strftime(ZEITFORMAT)
     s.exec(delete(Messwert).where(Messwert.gruppe_id == g.id, Messwert.zaehlpunkt.in_(zps),
                                   Messwert.beginn >= von, Messwert.beginn <= bis))
-    zeilen = [{**w, "gruppe_id": g.id} for w in imp.werte if w["zaehlpunkt"] in zps]
+    zeilen = [{"ende": None, **w, "gruppe_id": g.id} for w in imp.werte if w["zaehlpunkt"] in zps]
     if zeilen:
         s.execute(Messwert.__table__.insert(), zeilen)
     if imp.gemeinschafts_id and not g.gemeinschafts_id:
@@ -121,12 +139,17 @@ def gea_anlegen(s: Session, imp: Import | None, angaben: dict) -> tuple[Gruppe, 
                      for zp in erzeuger}
             anlage_zp = max(summe, key=summe.get)
     betreiber = s.exec(select(Teilnehmer).where(Teilnehmer.zaehlpunkt == anlage_zp)).first() if anlage_zp else None
+    stamm = imp.stammdaten.get(anlage_zp, {}) if imp else {}
+
+    def angabe(feld: str) -> str:  # Eingabe im Formular, sonst Stammdaten aus dem EDA-Bericht
+        return (angaben.get(feld) or "").strip() or stamm.get(feld, "")
+
     if not betreiber:
         betreiber = Teilnehmer(
-            rolle=Rolle.ERZEUGER, vorname=angaben.get("vorname", "").strip(),
-            nachname=angaben.get("nachname", "").strip(), firma=angaben.get("firma", "").strip() or None,
-            strasse=angaben.get("strasse", "").strip(), plz=angaben.get("plz", "").strip(),
-            ort=angaben.get("ort", "").strip(), email=angaben.get("email", "").strip(),
+            rolle=Rolle.ERZEUGER, vorname=angabe("vorname"),
+            nachname=angabe("nachname"), firma=angaben.get("firma", "").strip() or None,
+            strasse=angabe("strasse"), plz=angabe("plz"),
+            ort=angabe("ort"), email=angaben.get("email", "").strip(),
             telefon=angaben.get("telefon", "").strip() or None,
             zaehlpunkt=anlage_zp or f"{OHNE_ZP}{secrets.token_hex(4).upper()}",
             netzbetreiber=anlage_zp[2:8] if anlage_zp else "", anlage_kwp=float(angaben.get("anlage_kwp") or 0),
@@ -149,7 +172,7 @@ def gea_anlegen(s: Session, imp: Import | None, angaben: dict) -> tuple[Gruppe, 
         if imp.werte and g.status == GruppenStatus.VORSCHLAG:
             g.status = GruppenStatus.AKTIV  # Daten fließen schon, also ist die GEA in Betrieb
         for i, zp in enumerate(sorted(imp.zaehlpunkte - {anlage_zp} - imp.erzeuger), start=1):
-            wohnung_anlegen(s, g, zp, f"Wohnung {i}")
+            wohnung_anlegen(s, g, zp, f"Wohnung {i}", imp.stammdaten.get(zp))
         ergebnis = speichern(s, g, imp, neue_aufnehmen=False)
         weitere = imp.erzeuger - {anlage_zp}
         if weitere:

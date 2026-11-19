@@ -35,6 +35,7 @@ FIX PV handelt als bevollmächtigter Dienstleister, nicht als Organisator.
 | Unbekannte Spalten einmal zuordnen, die Plattform merkt sich das für jeden weiteren Export | fertig (Stufe 3) |
 | Export ohne erkennbares Ziel bleibt „geparkt“ und wird später zugeordnet, Aufbau-Bericht ohne Nummern und Namen | fertig (Stufe 3) |
 | Werte je Gemeinschaft getrennt (ein Zählpunkt in GEA und P2P gleichzeitig) | fertig (Stufe 3) |
+| EDA-Energiedatenreport (Gesamt- und Detailübersicht, Monatssummen je Zählpunkt): EC-ID, Stammdaten für Namen der Wohnungen, Hinweis bei unvollständigen Daten oder L3 | fertig (Stufe 3), mit echtem Bericht geprüft |
 | GEA aus dem ersten Export anlegen: Anlage, Wohnungen und Gemeinschafts-ID werden erkannt | fertig (Stufe 3) |
 | GEA-Seite: Zahlen je Wohnung und Monat, Tagesverlauf, Abrechnungsgrundlage als Excel | fertig (Stufe 3) |
 | GEA selbst abrechnend (FIX liefert Zahlen + Gebühr) oder von FIX abgerechnet, Aufteilung dynamisch oder statisch | fertig (Stufe 3) |
@@ -47,9 +48,9 @@ FIX PV handelt als bevollmächtigter Dienstleister, nicht als Organisator.
 ## Echten GEA-Export testen
 
 1. Plattform starten, Verwaltung öffnen, oben **GEA** → **Neue GEA**.
-2. Namen eintragen (z. B. „Test GEA“), Modell und Preis wählen, den EDA-Export (Excel `.xlsx` oder CSV) auswählen und **GEA anlegen**.
+2. Namen eintragen (z. B. „Test GEA“), Modell und Preis wählen, den EDA-Export (Excel `.xlsx` oder CSV) auswählen und **GEA anlegen**. Der Energiedatenreport aus dem EDA-Portal (Monatssummen) reicht für Abrechnung und Monatswerte. Einen Tagesverlauf gibt es nur mit Viertelstundenwerten.
 3. Kennt die Plattform eine Spalte nicht, zeigt sie die Spalte mit Beispielwerten und fragt einmal, was sie bedeutet. Die Antwort gilt für alle weiteren Exporte.
-4. Danach legt sie Anlage und Wohnungen an („Wohnung 1“, „Wohnung 2“ …, Namen später eintragen) und zeigt die Zahlen. Mit **Excel herunterladen** gibt es die Abrechnungsgrundlage.
+4. Danach legt sie Anlage und Wohnungen an (Namen und Adressen aus den Stammdaten des Berichts, sonst „Wohnung 1“, „Wohnung 2“ …) und zeigt die Zahlen. Mit **Excel herunterladen** gibt es die Abrechnungsgrundlage.
 5. Klappt das Einlesen nicht, zeigt die Plattform den Aufbau der Datei: Zählpunkte, IDs und Namen sind darin durch Platzhalter ersetzt. Diesen Bericht kann man weitergeben, ohne Kundendaten preiszugeben.
 
 Alte Excel-Dateien (`.xls`) bitte vorher in Excel als `.xlsx` speichern. Die Plattform verschickt nichts und meldet nichts beim Netzbetreiber an.

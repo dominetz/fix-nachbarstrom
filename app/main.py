@@ -529,7 +529,8 @@ def gruppe_seite(request: Request, gid: int, s: Session = Depends(sitzung), _=De
     if a:
         tag = tag or auswertung.bester_tag(s, d["erzeuger"].zaehlpunkt, a["monate"][max(0, len(a["monate"]) - 4)],
                                            g.id) or a["bis"]
-        tagesdiagramm = _tagesdiagramm(s, d["erzeuger"], abnehmer, tag, g.id)
+        if auswertung.hat_viertelstunden(s, [d["erzeuger"].zaehlpunkt] + [t.zaehlpunkt for t in abnehmer], g.id):
+            tagesdiagramm = _tagesdiagramm(s, d["erzeuger"], abnehmer, tag, g.id)
     vorschlag = abrechnungs_vorschlag(s, g)
     alle = [d["erzeuger"]] + [t for _, t in d["abnehmer"]]
     unterschriften = {u.teilnehmer_id for u in s.exec(select(Unterschrift).where(
@@ -1056,7 +1057,8 @@ def gea_seite(request: Request, gid: int, s: Session = Depends(sitzung), _=Depen
         if not tag:
             monat = a["monate"][max(0, len(a["monate"]) - 4)]
             tag = auswertung.bester_tag(s, betreiber.zaehlpunkt, monat, g.id) or _bester_gea_tag(s, g, monat) or a["bis"]
-        tagesdiagramm = gea.tagesdiagramm(s, g, tag)
+        if auswertung.hat_viertelstunden(s, list(importe.zaehlpunkte(s, g)), g.id):
+            tagesdiagramm = gea.tagesdiagramm(s, g, tag)
     wohnungen = importe.mitglieder(s, g)
     rechnungen = s.exec(select(Rechnung).where(Rechnung.gruppe_id == gid).order_by(Rechnung.bis.desc())).all()
     gebuehr_liste = s.exec(select(Gebuehr).where(Gebuehr.gruppe_id == gid).order_by(Gebuehr.bis.desc())).all()
@@ -1074,6 +1076,7 @@ def _bester_gea_tag(s: Session, g: Gruppe, monat: str) -> date | None:
     from sqlalchemy import func
     tag = func.substr(Messwert.beginn, 1, 10)
     zeile = s.exec(select(tag, func.sum(Messwert.eigendeckung)).where(Messwert.gruppe_id == g.id,
+                                                                      Messwert.ende == None,  # noqa: E711
                                                                       Messwert.beginn.like(f"{monat}%"))
                    .group_by(tag).order_by(func.sum(Messwert.eigendeckung).desc()).limit(1)).first()
     return date.fromisoformat(zeile[0]) if zeile else None

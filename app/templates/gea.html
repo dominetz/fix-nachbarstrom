@@ -17,9 +17,10 @@
 </div>
 <div class="zwei">
 <div class="karte"><h2>Je Monat</h2>{{ a.diagramm|safe }}</div>
-<div class="karte"><div style="display:flex;justify-content:space-between;align-items:start;gap:10px;flex-wrap:wrap"><h2>Tagesverlauf {{ tag.strftime("%d.%m.%Y") }}</h2>
+{% if tagesdiagramm %}<div class="karte"><div style="display:flex;justify-content:space-between;align-items:start;gap:10px;flex-wrap:wrap"><h2>Tagesverlauf {{ tag.strftime("%d.%m.%Y") }}</h2>
 <form method="get" class="nicht-drucken" style="display:flex;gap:6px"><input type="date" name="tag" value="{{ tag }}" style="width:auto"><button class="zweit klein-knopf">Zeigen</button></form></div>
 {{ tagesdiagramm|safe }}<p class="klein">Leistung in kW je Viertelstunde.</p></div>
+{% else %}<div class="karte"><h2>Tagesverlauf</h2><p class="klein">Die Energiedaten sind Monatssummen aus dem EDA-Energiedatenreport. Für Abrechnung und Monatswerte reicht das, einen Tagesverlauf gibt es damit nicht.</p></div>{% endif %}
 </div>
 <div class="karte tabelle"><h2>Im Haus genutzt je Wohnung und Monat (kWh)</h2>
 <table><tr><th>Wohnung</th>{% for b in a.beschriftung %}<th class="zahl">{{ b }}</th>{% endfor %}<th class="zahl">Summe</th><th class="zahl">Verbrauch</th><th class="zahl">Anteil</th>{% if a.preis > 0 %}<th class="zahl">Wert</th>{% endif %}</tr>
