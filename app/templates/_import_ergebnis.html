@@ -19,7 +19,7 @@
  <span class="badge ok">importiert</span>
  <p>{{ e.von.strftime("%d.%m.%Y") }} – {{ e.bis.strftime("%d.%m.%Y") }} · {{ e.zaehlpunkte }} Zählpunkte · {{ e.werte|zahl }} Werte · in <a href="{{ gruppenlink(e.gruppe) }}">{{ e.gruppe.titel }}</a> ({{ e.erkannt }})</p>
  {% if e.neu %}<p class="klein">Neu als Wohnung aufgenommen: {{ e.neu|join(", ") }}. Namen bitte in der GEA nachtragen.</p>{% endif %}
- {% if e.unbekannt %}<p class="klein"><span class="badge warn">{{ e.unbekannt|length }} Zählpunkte gehören nicht zur Gruppe und wurden übersprungen</span> {{ e.unbekannt|join(", ") }}</p>{% endif %}
+ {% if e.unbekannt %}<p class="klein"><span class="badge warn">{% if e.unbekannt|length == 1 %}1 Zählpunkt gehört nicht zur Gruppe und wurde übersprungen{% else %}{{ e.unbekannt|length }} Zählpunkte gehören nicht zur Gruppe und wurden übersprungen{% endif %}</span> {{ e.unbekannt|join(", ") }}</p>{% endif %}
  {% for h in e.hinweise %}<p class="klein">{{ h }}</p>{% endfor %}
 {% endif %}
 </div>

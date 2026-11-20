@@ -25,6 +25,16 @@ case "$ID-$VERSION_ID" in
   *) echo "Gebaut für Ubuntu 24.04 und Debian 12, gefunden: $PRETTY_NAME"; frage "Trotzdem weiter?" || exit 1 ;;
 esac
 
+# Läuft hier schon ein anderer Webserver (z. B. das Dispo-Portal mit eigenem Caddy in Docker),
+# würde die Einrichtung ihn stören. Dann hier aufhören und die Einbindung gemeinsam planen.
+if ss -Hltn '( sport = :80 or sport = :443 )' | grep -q . && ! systemctl is-active --quiet caddy; then
+  echo "Auf diesem Server belegt schon ein anderes Programm Port 80 oder 443:"
+  ss -Hltnp '( sport = :80 or sport = :443 )' || true
+  echo "Die Einrichtung würde es stören und hört deshalb hier auf, ohne etwas zu ändern."
+  echo "Für einen Server, auf dem schon etwas läuft, die Plattform hinter dem vorhandenen Webserver einbinden (README)."
+  exit 1
+fi
+
 read -r -p "Domain der Plattform (z. B. nachbarstrom.fix-pv.com): " DOMAIN
 DOMAIN="${DOMAIN,,}"
 [[ "$DOMAIN" =~ ^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$ ]] \
@@ -109,10 +119,11 @@ if frage "Täglich um 02:30 Serverzeit sichern (Datenbank und Schlüssel, 30 Tag
   systemctl enable --now nachbarstrom-sicherung.timer
 fi
 
-if frage "Erfundenen Testbetrieb laden (nur zum Ausprobieren, keine echten Kunden)?"; then
+if [[ -z ${NACHBARSTROM_MIT_DATEN:-} ]] && frage "Erfundenen Testbetrieb laden (nur zum Ausprobieren, keine echten Kunden)?"; then
   runuser -u "$BENUTZER" -- bash -c "set -a; . '$UMGEBUNG'; set +a; cd /opt/nachbarstrom && '$VENV/bin/python' demo_daten.py"
 fi
 
 echo
+[[ -n ${NACHBARSTROM_MIT_DATEN:-} ]] && echo "Als Nächstes werden die Daten vom PC übernommen."
 echo "Fertig. Öffentlich: https://$DOMAIN/   Verwaltung: https://$DOMAIN/verwaltung (Benutzer admin)"
 echo "Firmendaten für Impressum und Datenschutz in $UMGEBUNG eintragen, dann: systemctl restart nachbarstrom"

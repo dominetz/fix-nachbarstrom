@@ -67,6 +67,10 @@ code{background:var(--hell);padding:1px 5px;border-radius:4px;word-break:break-a
 .schritte div::after{content:"";position:absolute;top:15px;left:-50%;width:100%;height:2px;background:#dfe4dc}
 .schritte div:first-child::after{display:none}
 .schritte div.ja{color:var(--text)}.schritte div.ja::before,.schritte div.ja::after{background:var(--gruen)}
+@media (max-width:560px){.schritte{flex-direction:column;flex-wrap:nowrap}
+.schritte div{flex:none;min-width:0;text-align:left;padding:0 0 0 28px;margin-bottom:10px;line-height:20px}
+.schritte div::before{left:0;top:2px;margin-left:0}
+.schritte div::after{left:7px;top:-12px;width:2px;height:14px}}
 .diagramm{width:100%;height:auto;display:block}
 .diagramm .gitter{stroke:var(--linie);stroke-width:1}
 .diagramm .basis{stroke:#9aa596;stroke-width:1}

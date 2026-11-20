@@ -51,16 +51,16 @@
 {% endif %}
 <label>Wie wird bei Ihnen meistens Strom verbraucht?</label>
 <select name="profiltyp">
-<option value="haushalt">Haushalt, tagsüber meist niemand zu Hause</option>
-<option value="haushalt_tagsueber">Haushalt, tagsüber jemand zu Hause</option>
-<option value="waermepumpe">Haushalt mit Wärmepumpe</option>
-<option value="eauto">Haushalt mit E-Auto, lädt tagsüber zu Hause</option>
-<option value="gewerbe">Betrieb, Büro oder Praxis (Mo–Fr)</option>
+<option value="haushalt" {{ "selected" if werte.profiltyp == "haushalt" }}>Haushalt, tagsüber meist niemand zu Hause</option>
+<option value="haushalt_tagsueber" {{ "selected" if werte.profiltyp == "haushalt_tagsueber" }}>Haushalt, tagsüber jemand zu Hause</option>
+<option value="waermepumpe" {{ "selected" if werte.profiltyp == "waermepumpe" }}>Haushalt mit Wärmepumpe</option>
+<option value="eauto" {{ "selected" if werte.profiltyp == "eauto" }}>Haushalt mit E-Auto, lädt tagsüber zu Hause</option>
+<option value="gewerbe" {{ "selected" if werte.profiltyp == "gewerbe" }}>Betrieb, Büro oder Praxis (Mo–Fr)</option>
 </select>
 {% if not erzeuger %}<label>Haben Sie schon einen Wunschpartner? (optional)</label>
 <input name="wunschpartner" placeholder="z. B. Name und Adresse Ihres Nachbarn" value="{{ werte.wunschpartner or '' }}">
 <p class="klein">Dann versuchen wir zuerst, Sie beide zusammenzubringen. Nach der Anmeldung bekommen Sie außerdem einen Einladungslink, den Sie weitergeben können. Ohne Wunschpartner suchen wir passende Partner in Ihrer Nähe, deren Erzeugung und Verbrauch zusammenpassen.</p>{% endif %}
-<label><input type="checkbox" name="einwilligung" value="true"> Ich willige ein, dass {{ dienstleister.firma }} meine Angaben und Viertelstundenwerte nutzt, um passende Partner zu finden. Partner sehen vor Vertragsabschluss nur Ortsteil und erwartete Menge, nicht meinen Namen. Ich kann die Einwilligung jederzeit widerrufen.</label>
+<label><input type="checkbox" name="einwilligung" value="true" {{ "checked" if werte.einwilligung }}> Ich willige ein, dass {{ dienstleister.firma }} meine Angaben und Viertelstundenwerte nutzt, um passende Partner zu finden. Partner sehen vor Vertragsabschluss nur Ortsteil und erwartete Menge, nicht meinen Namen. Ich kann die Einwilligung jederzeit widerrufen.</label>
 <p><button>Anmelden</button></p>
 </form>
 {% endblock %}

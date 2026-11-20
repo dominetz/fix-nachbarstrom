@@ -118,9 +118,17 @@ def sitzung():
 sperre = schutz.Sperre()
 
 
+_LOKAL = {"127.0.0.1", "::1"}
+
+
 def _adresse(request: Request) -> str:
-    """Adresse des Besuchers. Hinter dem Webserver (Caddy) setzt uvicorn sie aus X-Forwarded-For."""
-    return request.client.host if request.client else "unbekannt"
+    """Adresse des Besuchers. Hinter Caddy (Server) setzt uvicorn sie aus X-Forwarded-For. Kommt die
+    Anfrage trotzdem von diesem Rechner selbst, etwa über den Cloudflare-Tunnel am PC, zählt
+    CF-Connecting-IP. Von außen lässt sich das nicht vortäuschen, uvicorn hört nur auf 127.0.0.1."""
+    host = request.client.host if request.client else "unbekannt"
+    if host in _LOKAL and request.headers.get("cf-connecting-ip"):
+        return request.headers["cf-connecting-ip"].strip()[:45]
+    return host
 
 
 def _passwort_ok(passwort: str) -> bool:
@@ -210,7 +218,7 @@ def anmelden(request: Request, s: Session = Depends(sitzung),
                  email=email, telefon=telefon, zaehlpunkt=zaehlpunkt, zaehlpunkt_bezug=zaehlpunkt_bezug,
                  zaehlpunkt_einspeisung=zaehlpunkt_einspeisung, trafo_id=trafo_id,
                  umspannwerk_id=umspannwerk_id, jahresverbrauch_kwh=jahresverbrauch_kwh, anlage_kwp=anlage_kwp,
-                 wunschpartner=wunschpartner)
+                 wunschpartner=wunschpartner, profiltyp=profiltyp.value, einwilligung=einwilligung)
     fehler = []
     zp = normalisieren(zaehlpunkt)
     if not ist_gueltig(zp):
@@ -678,8 +686,14 @@ def zustimmung_setzen(gid: int, s: Session = Depends(sitzung), _=Depends(verwalt
     ids = {d["erzeuger"].id} | {t.id for _, t in d["abnehmer"]}
     erteilt = {x.teilnehmer_id for x in s.exec(select(Zustimmung).where(Zustimmung.gruppe_id == gid)).all()
                if x.erteilt_am}
-    if ids <= erteilt and g.status == GruppenStatus.EDA_ANGEMELDET:
-        g.status = GruppenStatus.AKTIV
+    # Wer Freigabe oder Zustimmung einträgt, hat die Gruppe beim Netzbetreiber angemeldet: Status
+    # nachziehen, statt ihn zusätzlich von Hand umstellen zu müssen
+    vorher = (GruppenStatus.UNTERSCHRIEBEN, GruppenStatus.REGISTRIERT, GruppenStatus.EDA_ANGEMELDET)
+    if g.status in vorher:
+        if ids <= erteilt:
+            g.status = GruppenStatus.AKTIV
+        elif z.freigegeben_am or z.erteilt_am:
+            g.status = GruppenStatus.EDA_ANGEMELDET
         s.add(g)
         s.commit()
     return RedirectResponse(f"/verwaltung/gruppe/{gid}", status_code=303)

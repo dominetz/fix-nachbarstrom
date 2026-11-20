@@ -78,6 +78,20 @@ uvicorn app.main:app --port 8000
 
 Weitere Einstellungen in `app/config.py` (Firmendaten, Frist für die Zustimmung, Basis-URL).
 
+## Übergang: Dauerbetrieb am PC (bis der Server da ist)
+
+Bis zum eigenen Server läuft die Plattform auf dem PC im Büro, mit eigenen Daten im Ordner `betrieb\` (getrennt vom Testbetrieb in `nachbarstrom.db`). Die Einstellungen stehen in `betrieb\nachbarstrom.env`, genauso aufgebaut wie später auf dem Server. Deshalb ist der Umzug ein einziger Befehl.
+
+1. Doppelklick auf **Dauerbetrieb einrichten.bat**. Das Skript fragt nach Domain (Vorschlag `nachbarstrom.fix-pv.com`) und Verwaltungspasswort (gespeichert wird nur ein Hash). Danach fragt es einzeln, ob die Plattform bei der Anmeldung am PC von selbst startet und ob der Ruhezustand am Netzteil aus soll.
+2. Die Verwaltung ist dann am PC unter `http://localhost:8010/verwaltung` erreichbar (Benutzer `admin`). Der Testbetrieb mit `Nachbarstrom starten.bat` läuft unabhängig davon weiter auf Port 8000.
+3. Nach neuem Code (`git pull`) oder geänderten Einstellungen: Doppelklick auf **Dauerbetrieb neu starten.bat**. Vor jedem Start wird die Datenbank nach `betrieb\sicherung` gesichert (30 Tage).
+
+Die Firmendaten für Impressum und Datenschutz kommen in `betrieb\nachbarstrom.env` und ziehen beim Umzug mit.
+
+**Von außen erreichbar** ist der PC-Betrieb erst, wenn das freigeschaltet wird. Das passiert zum Launch, damit die Plattform dann so erreichbar ist wie das Dispotool: eigene Subdomain mit HTTPS, Verwaltung mit Login. Möglich ist ein Tunnel vom PC (zum Beispiel Cloudflare Tunnel, ohne offenen Port am Router) oder gleich der Server. Die persönlichen Links tragen von Anfang an die endgültige Adresse, deshalb bleiben verschickte Links beim Umzug gültig.
+
+**Umzug auf den Server:** `powershell -ExecutionPolicy Bypass -File deploy\hochladen.ps1 -Server <IP> -Einrichten -Daten`. Das beendet den PC-Betrieb und schaltet dessen Autostart ab. Dann richtet es den Server ein und übernimmt Datenbank, Schlüssel und Firmendaten. Vorher prüft es die Datenbank, und was auf dem Server schon lag, wird gesichert. Danach den DNS-Eintrag auf den Server umstellen und `NACHBARSTROM_HOSTER` anpassen.
+
 ## Online betreiben (eigener Server in der EU)
 
 Ein kleiner Linux-Server (Ubuntu 24.04 oder Debian 12) reicht. Die Plattform läuft dort als Dienst, Caddy davor sorgt für HTTPS mit einem Let's-Encrypt-Zertifikat. Alles liegt im Ordner `deploy/`.
@@ -90,12 +104,12 @@ Ein kleiner Linux-Server (Ubuntu 24.04 oder Debian 12) reicht. Die Plattform lä
 **Einrichten (vom Windows-PC aus, im Ordner der Plattform):**
 
 ```powershell
-.\deploy\hochladen.ps1 -Server <IP des Servers> -Einrichten
+powershell -ExecutionPolicy Bypass -File deploy\hochladen.ps1 -Server <IP des Servers> -Einrichten
 ```
 
 Das lädt den eingecheckten Stand hoch (nie Datenbank oder Schlüssel vom PC) und startet `deploy/einrichten.sh`. Das Skript fragt nach Domain und Verwaltungspasswort (gespeichert wird nur ein Hash) und fragt einzeln, ob Firewall, tägliche Sicherung und der erfundene Testbetrieb dazukommen sollen.
 
-**Updates:** `.\deploy\hochladen.ps1 -Server <IP>`. Vorher wird die Datenbank gesichert. Startet die neue Version nicht, bietet das Skript an, zur vorigen zurückzugehen.
+**Updates:** `powershell -ExecutionPolicy Bypass -File deploy\hochladen.ps1 -Server <IP>`. Vorher wird die Datenbank gesichert. Startet die neue Version nicht, bietet das Skript an, zur vorigen zurückzugehen.
 
 **Auf dem Server:**
 
@@ -107,6 +121,8 @@ Das lädt den eingecheckten Stand hoch (nie Datenbank oder Schlüssel vom PC) un
 | Einstellungen, Firmendaten | `/etc/nachbarstrom/nachbarstrom.env`, danach `systemctl restart nachbarstrom` |
 | Passwort ändern | `bash /opt/nachbarstrom/deploy/passwort.sh` |
 | Protokoll | `journalctl -u nachbarstrom` |
+
+`einrichten.sh` ist für einen frischen Server gedacht. Läuft dort schon ein Webserver auf Port 80 oder 443 (etwa das Dispo-Portal mit eigenem Caddy), hört es auf, ohne etwas zu ändern. Auf so einem Server wird die Plattform hinter dem vorhandenen Webserver eingebunden. Das planen wir beim Launch gemeinsam.
 
 Die Sicherungen liegen auf demselben Server. Für den Fall, dass der Server ausfällt, zusätzlich die Sicherung des Anbieters buchen oder die Dateien regelmäßig herunterladen.
 

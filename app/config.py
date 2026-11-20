@@ -3,6 +3,12 @@ import os
 import secrets
 from pathlib import Path
 
+from . import einstellungen
+
+# Am PC (Dauerbetrieb) stehen die Einstellungen in einer Datei, gleich aufgebaut wie auf dem Server
+if os.environ.get("NACHBARSTROM_EINSTELLUNGEN"):
+    einstellungen.laden(os.environ["NACHBARSTROM_EINSTELLUNGEN"])
+
 DATENBANK = os.environ.get("NACHBARSTROM_DB", "sqlite:///nachbarstrom.db")
 ADMIN_BENUTZER = os.environ.get("NACHBARSTROM_ADMIN_USER", "admin")
 ADMIN_PASSWORT = os.environ.get("NACHBARSTROM_ADMIN_PASSWORD", "")  # leer = Verwaltung gesperrt

@@ -909,3 +909,106 @@ def test_sicherheits_kopfzeilen_und_rechtsseiten(client, monkeypatch):
     monkeypatch.setattr(config, "RECHTSTEXTE_GEPRUEFT", True)
     assert "Entwurf" not in c.get("/datenschutz").text
     assert "set-cookie" not in start.headers
+
+
+def test_adresse_hinter_tunnel():
+    from starlette.requests import Request
+
+    def anfrage(host, kopf=None):
+        return Request({"type": "http", "client": (host, 1), "headers": [(k.encode(), v.encode()) for k, v in (kopf or {}).items()]})
+
+    assert main._adresse(anfrage("127.0.0.1", {"cf-connecting-ip": "198.51.100.4"})) == "198.51.100.4"
+    assert main._adresse(anfrage("127.0.0.1")) == "127.0.0.1"
+    # Von außen (Adresse schon aus X-Forwarded-For) zählt ein mitgeschickter Kopf nicht
+    assert main._adresse(anfrage("203.0.113.9", {"cf-connecting-ip": "198.51.100.4"})) == "203.0.113.9"
+
+
+def test_einstellungsdatei_und_umzug(tmp_path, monkeypatch):
+    from app import einstellungen
+    pc = tmp_path / "pc.env"
+    pc.write_text("\ufeff# Kommentar\nNACHBARSTROM_DB=sqlite:///betrieb/nachbarstrom.db\n"
+                  'NACHBARSTROM_FIRMA_ADRESSE="Teststraße 1, 6800 Feldkirch"\r\n'
+                  "NACHBARSTROM_FIRMA_UID='ATU00000000'\nNACHBARSTROM_ADMIN_PASSWORD_HASH=pbkdf2_sha256:1:aa:bb\n"
+                  "NACHBARSTROM_HOSTER=Tunnel\nNACHBARSTROM_FIRMA_GF=\"A$B\"\nNACHBARSTROM_RECHTSTEXTE_GEPRUEFT=ja\n",
+                  encoding="utf-8")
+    werte = einstellungen.lesen(pc)
+    assert werte["NACHBARSTROM_FIRMA_ADRESSE"] == "Teststraße 1, 6800 Feldkirch"
+    assert werte["NACHBARSTROM_FIRMA_UID"] == "ATU00000000"
+
+    monkeypatch.setenv("NACHBARSTROM_FIRMA_UID", "schon gesetzt")
+    monkeypatch.delenv("NACHBARSTROM_FIRMA_ADRESSE", raising=False)
+    einstellungen.laden(pc)
+    import os
+    assert os.environ["NACHBARSTROM_FIRMA_UID"] == "schon gesetzt"
+    assert os.environ["NACHBARSTROM_FIRMA_ADRESSE"] == "Teststraße 1, 6800 Feldkirch"
+
+    server = tmp_path / "server.env"
+    server.write_text("# Server\nNACHBARSTROM_DB=sqlite:////var/lib/nachbarstrom/nachbarstrom.db\n"
+                      "NACHBARSTROM_ADMIN_PASSWORD_HASH=pbkdf2_sha256:9:cc:dd\n"
+                      '#NACHBARSTROM_FIRMA_ADRESSE="Straße Nr, PLZ Ort"\nNACHBARSTROM_FIRMA_ADRESSE="alt"\n'
+                      '#NACHBARSTROM_HOSTER=""\n', encoding="utf-8")
+    uebernommen, uebersprungen = einstellungen.uebernehmen(pc, server)
+    assert uebernommen == ["NACHBARSTROM_FIRMA_ADRESSE", "NACHBARSTROM_FIRMA_UID", "NACHBARSTROM_RECHTSTEXTE_GEPRUEFT"]
+    assert uebersprungen == ["NACHBARSTROM_FIRMA_GF"]
+    neu = einstellungen.lesen(server)
+    assert neu["NACHBARSTROM_DB"] == "sqlite:////var/lib/nachbarstrom/nachbarstrom.db"  # Server-Pfad bleibt
+    assert neu["NACHBARSTROM_ADMIN_PASSWORD_HASH"] == "pbkdf2_sha256:9:cc:dd"  # Server-Passwort bleibt
+    assert neu["NACHBARSTROM_FIRMA_ADRESSE"] == "Teststraße 1, 6800 Feldkirch"
+    assert "NACHBARSTROM_HOSTER" not in neu
+    assert server.read_text(encoding="utf-8").count("NACHBARSTROM_FIRMA_ADRESSE") == 1
+
+
+def test_sicherung_am_pc(tmp_path):
+    import os
+    import sqlite3
+    import time
+    from app import sicherung
+    db, geheimnis = tmp_path / "nachbarstrom.db", tmp_path / "nachbarstrom.geheimnis"
+    with sqlite3.connect(db) as v:
+        v.execute("create table teilnehmer (id integer)")
+        v.execute("insert into teilnehmer values (1)")
+    geheimnis.write_text("abc")
+    ordner = tmp_path / "sicherung"
+    ordner.mkdir()
+    alt = ordner / "nachbarstrom-alt.db"
+    alt.write_text("x")
+    os.utime(alt, (time.time() - 40 * 86400,) * 2)
+    ziel = sicherung.sichern(db, geheimnis, ordner)
+    assert sqlite3.connect(ziel).execute("select count(*) from teilnehmer").fetchone()[0] == 1
+    assert ziel.with_suffix(".geheimnis").read_text() == "abc"
+    assert not alt.exists()
+    assert sicherung.sichern(tmp_path / "fehlt.db", geheimnis, ordner) is None
+
+    umzug = tmp_path / "umzug"
+    sicherung.fuer_umzug(db, geheimnis, umzug)
+    assert sorted(p.name for p in umzug.iterdir()) == ["nachbarstrom.db", "nachbarstrom.geheimnis"]
+    assert sicherung.db_pfad("sqlite:///betrieb/nachbarstrom.db").as_posix() == "betrieb/nachbarstrom.db"
+
+
+def test_zustimmung_zieht_status_nach(client):
+    c, engine = client
+    auth = ("admin", "test")
+    _anmelden(c, "erzeuger", 1, anlage_kwp=10, jahresverbrauch_kwh=3000, profiltyp="haushalt")
+    _anmelden(c, "abnehmer", 2)
+    r = c.post("/verwaltung/gruppe", data={"erzeuger_id": 1, "abnehmer_ids": "2"}, auth=auth, follow_redirects=False)
+    gid = int(r.headers["location"].rsplit("/", 1)[1])
+    with Session(engine) as s:
+        g = s.get(Gruppe, gid)
+        g.status = GruppenStatus.UNTERSCHRIEBEN
+        s.add(g)
+        s.commit()
+    heute = date.today().isoformat()
+    c.post(f"/verwaltung/gruppe/{gid}/zustimmung", auth=auth, data={"teilnehmer_id": 1, "freigegeben_am": heute})
+    with Session(engine) as s:
+        assert s.get(Gruppe, gid).status == GruppenStatus.EDA_ANGEMELDET
+    for tid in (1, 2):
+        c.post(f"/verwaltung/gruppe/{gid}/zustimmung", auth=auth, data={"teilnehmer_id": tid, "erteilt_am": heute})
+    with Session(engine) as s:
+        assert s.get(Gruppe, gid).status == GruppenStatus.AKTIV
+
+
+def test_anmeldung_behaelt_auswahl_nach_fehler(client):
+    c, _ = client
+    seite = _anmelden(c, "abnehmer", 5, zaehlpunkt="AT123", profiltyp="waermepumpe").text
+    assert '<option value="waermepumpe" selected>' in seite
+    assert 'name="einwilligung" value="true" checked' in seite
