@@ -1,0 +1,5 @@
+# Skripte für den Linux-Server immer mit LF, auch wenn Git unter Windows CRLF auscheckt
+*.sh text eol=lf
+deploy/Caddyfile text eol=lf
+deploy/*.service text eol=lf
+deploy/*.timer text eol=lf

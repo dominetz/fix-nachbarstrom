@@ -1,0 +1,13 @@
+# Fix Nachbarstrom. einrichten.sh setzt die Domain ein. Caddy holt und erneuert das
+# HTTPS-Zertifikat (Let's Encrypt) selbst und leitet http auf https um.
+DOMAIN_EINTRAGEN {
+	encode zstd gzip
+	request_body {
+		max_size 50MB
+	}
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		-Server
+	}
+	reverse_proxy 127.0.0.1:8000
+}

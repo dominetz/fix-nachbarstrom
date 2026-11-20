@@ -1,0 +1,29 @@
+[Unit]
+Description=Fix Nachbarstrom
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=nachbarstrom
+Group=nachbarstrom
+WorkingDirectory=/opt/nachbarstrom
+EnvironmentFile=/etc/nachbarstrom/nachbarstrom.env
+# Nur lokal erreichbar, nach außen geht alles über Caddy (HTTPS). Die Adresse des Besuchers
+# kommt aus X-Forwarded-For, aber nur wenn die Anfrage von Caddy auf demselben Server kommt.
+ExecStart=/opt/nachbarstrom-venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000 --proxy-headers --forwarded-allow-ips 127.0.0.1 --no-server-header
+Restart=on-failure
+RestartSec=5
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+ReadWritePaths=/var/lib/nachbarstrom
+
+[Install]
+WantedBy=multi-user.target

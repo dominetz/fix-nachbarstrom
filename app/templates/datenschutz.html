@@ -1,0 +1,40 @@
+{% extends "basis.html" %}
+{% block titel %}Datenschutz · {{ marke }}{% endblock %}
+{% block inhalt %}
+{% if not gepr %}<div class="fehler">Entwurf: Diese Datenschutzerklärung ist ein Entwurf und muss vor dem Start rechtlich geprüft werden.</div>{% endif %}
+<h1>Datenschutz</h1>
+<div class="karte">
+<h2>Wer verantwortlich ist</h2>
+<p>{{ dienstleister.firma }}, {{ dienstleister.adresse }}, {{ dienstleister.email }}</p>
+
+<h2>Welche Daten wir verarbeiten</h2>
+<ul>
+<li>Angaben aus der Anmeldung oder Anfrage: Name, Firma, Adresse, E-Mail, Telefon, Zählpunktnummern, Größe der PV-Anlage, Jahresverbrauch.</li>
+<li>Energiedaten aus dem EDA-System: Verbrauch, Erzeugung und geteilte Mengen je Zählpunkt, als Viertelstunden- oder Monatswerte.</li>
+<li>Bei der Unterschrift von Vertrag und Vollmacht: der eingetippte Name, Datum und Uhrzeit und die IP-Adresse.</li>
+<li>Rechnungen und Zahlungseingänge.</li>
+</ul>
+
+<h2>Wofür</h2>
+<p>Um passende Partner zu finden, Verträge zu erstellen, die Teilnahme beim Netzbetreiber anzumelden, Rechnungen zu erstellen und Sie über Ihren Stand zu informieren.</p>
+
+<h2>Rechtsgrundlage</h2>
+<p>Ihre Einwilligung bei der Anmeldung (Art. 6 Abs. 1 lit. a DSGVO), die Erfüllung des Vertrags (lit. b) und gesetzliche Pflichten, etwa zur Aufbewahrung von Rechnungen (lit. c). Eine Einwilligung können Sie jederzeit widerrufen.</p>
+
+<h2>Wer die Daten bekommt</h2>
+<ul>
+<li>Ihre Partner in der Gruppe oder GEA: Name, Zählpunkt und abgerechnete Mengen, soweit für Vertrag und Rechnung nötig. Vor Vertragsabschluss sehen Partner nur Ortsteil und erwartete Menge.</li>
+<li>Ihr Netzbetreiber, für die Anmeldung der Teilnahme.</li>
+<li>Unser Hosting-Anbieter ({{ dienstleister.hoster }}), der die Plattform in einem Rechenzentrum in der EU betreibt, als Auftragsverarbeiter.</li>
+</ul>
+
+<h2>Wie lange</h2>
+<p>Solange Sie teilnehmen, danach so lange, wie gesetzliche Aufbewahrungspflichten es verlangen [Fristen eintragen]. Anmeldungen ohne Vertrag löschen wir [Frist eintragen] nach der letzten Rückmeldung.</p>
+
+<h2>Cookies und externe Dienste</h2>
+<p>Die Plattform setzt keine Cookies zur Analyse oder Werbung und lädt keine Inhalte von fremden Servern. Schriften liegen auf unserem eigenen Server.</p>
+
+<h2>Ihre Rechte</h2>
+<p>Sie haben das Recht auf Auskunft, Berichtigung, Löschung, Einschränkung der Verarbeitung, Datenübertragbarkeit und Widerspruch. Schreiben Sie dazu an {{ dienstleister.email }}. Sie können sich außerdem bei der Österreichischen Datenschutzbehörde beschweren.</p>
+</div>
+{% endblock %}
