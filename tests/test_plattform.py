@@ -809,3 +809,54 @@ def test_gea_aus_energiedatenreport(client):
         okt = s.exec(select(main.Messwert).where(main.Messwert.beginn >= "2026-10-01")).all()
         assert okt and all(m.ende is None for m in okt)
         assert aw.hat_viertelstunden(s, [zp(51)], gid)
+
+
+# ---------------------------------------------------------------- Bezug und Einspeisung, P2P-Übersicht
+
+def test_anmeldung_fragt_bezug_und_einspeisung(client):
+    c, engine = client
+    erzeuger = c.get("/anmelden?rolle=erzeuger").text
+    assert "Zählpunktnummer Einspeisung" in erzeuger and 'name="zaehlpunkt_bezug"' in erzeuger
+    abnehmer = c.get("/anmelden?rolle=abnehmer").text
+    assert "Zählpunktnummer Bezug" in abnehmer and 'name="zaehlpunkt_einspeisung"' in abnehmer
+    # gleiche Nummer für Bezug und Einspeisung wird abgelehnt, falsche Nummer auch
+    r = _anmelden(c, "erzeuger", 1, anlage_kwp=10, zaehlpunkt_bezug=zp(1))
+    assert r.status_code == 200 and "verschiedene Zählpunktnummern" in r.text
+    r = _anmelden(c, "erzeuger", 1, anlage_kwp=10, zaehlpunkt_bezug="AT123")
+    assert "Bezug stimmt nicht" in r.text
+    assert _anmelden(c, "erzeuger", 1, anlage_kwp=10, zaehlpunkt_bezug=zp(101)).status_code == 303
+    assert _anmelden(c, "abnehmer", 2, zaehlpunkt_einspeisung=zp(102)).status_code == 303
+    assert _anmelden(c, "abnehmer", 3).status_code == 303
+    with Session(engine) as s:
+        e, a, b = (s.exec(select(Teilnehmer).where(Teilnehmer.zaehlpunkt == zp(n))).one() for n in (1, 2, 3))
+    assert (e.einspeise_zp, e.bezug_zp) == (zp(1), zp(101))
+    assert (a.bezug_zp, a.einspeise_zp) == (zp(2), zp(102))
+    assert (b.bezug_zp, b.einspeise_zp) == (zp(3), None)
+    liste = c.get("/verwaltung/teilnehmer", auth=("admin", "test")).text
+    assert "Bezug" in liste and "Einspeisung" in liste
+
+
+def test_gea_anfrage_mit_zaehlpunkt_der_anlage(client):
+    c, engine = client
+    daten = {"vorname": "Nora", "nachname": "Test", "email": "n@example.com", "strasse": "Weg 1", "plz": "6800",
+             "ort": "Feldkirch", "einwilligung": "true"}
+    assert "stimmt nicht" in c.post("/gea", data={**daten, "anlage_zp": "AT1"}).text
+    assert "Danke, Nora" in c.post("/gea", data={**daten, "anlage_zp": zp(77)}).text
+    with Session(engine) as s:
+        aid = s.exec(select(main.Anfrage)).one().id
+    formular = c.get(f"/verwaltung/gea/neu?anfrage={aid}", auth=("admin", "test")).text
+    assert f'value="{zp(77)}"' in formular
+
+
+def test_p2p_uebersicht(client):
+    c, engine = client
+    auth = ("admin", "test")
+    _anmelden(c, "erzeuger", 1, anlage_kwp=10, jahresverbrauch_kwh=3000, profiltyp="haushalt")
+    _anmelden(c, "abnehmer", 2)
+    _anmelden(c, "abnehmer", 3, wunschpartner="Familie Sonne")
+    c.post("/verwaltung/gruppe", data={"erzeuger_id": 1, "abnehmer_ids": "2"}, auth=auth)
+    seite = c.get("/verwaltung/p2p", auth=auth).text
+    assert "Peer-to-Peer" in seite and 'href="/verwaltung/p2p" class="aktiv"' in seite
+    gruppen, frei = seite.split('id="frei"')
+    assert "/verwaltung/gruppe/1" in gruppen and "noch keine Daten" in gruppen
+    assert "Familie Sonne" in frei and "1 noch ohne Gruppe" in gruppen

@@ -1,0 +1,36 @@
+{% extends "verwaltung_basis.html" %}
+{% import "_status.html" as status %}
+{% block inhalt %}
+<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap"><h1>Peer-to-Peer</h1><a class="knopf" href="/verwaltung/matching">Neue Gruppe aus dem Matching</a></div>
+<p class="unter">Ein Erzeuger teilt seinen Überschuss mit Abnehmern in der Nähe (§ 68 ElWG). Vertrag, Anmeldung und Abrechnung laufen über die Plattform.</p>
+
+<div class="raster">
+<div class="kpi"><div class="wert">{{ k.aktiv }} <small>aktiv</small>{% if k.in_arbeit %} · {{ k.in_arbeit }} <small>in Vorbereitung</small>{% endif %}</div><div class="label">P2P-Gruppen</div></div>
+<div class="kpi"><div class="wert">{{ k.erzeuger }} <small>Erzeuger</small> · {{ k.abnehmer }} <small>Abnehmer</small></div><div class="label">angemeldet{% if k.frei %} · <a href="#frei">{{ k.frei }} noch ohne Gruppe</a>{% endif %}</div></div>
+<div class="kpi"><div class="wert">{{ k.geteilt|zahl }} <small>kWh</small></div><div class="label">geteilt in aktiven Gruppen, letzte 12 Monate mit Daten</div></div>
+<a class="kpi" href="/verwaltung/rechnungen"><div class="wert">{{ k.offen|zahl(2) }} <small>€</small></div><div class="label">offen bei Abnehmern{% if k.ueberfaellig %} · <span class="badge rot">{{ k.ueberfaellig }} überfällig</span>{% endif %}</div></a>
+</div>
+
+<div class="karte tabelle"><h2>Gruppen</h2>
+<table><tr><th>Gruppe</th><th>Abnehmer</th><th class="zahl">Preis</th><th class="zahl">Geteilt (12 Mon.)</th><th class="zahl">Offen</th><th>Abrechnung</th></tr>
+{% for z in zeilen %}{% set g, e, a = z.g, z.e, z.a %}<tr>
+<td style="min-width:260px"><a href="/verwaltung/gruppe/{{ g.id }}"><b>{{ g.id }} · {{ e.name }}</b></a> {{ status.gruppe(g.status) }}<br><span class="klein">{{ e.ort }} · {{ e.anlage_kwp|zahl(1) }} kWp · Einspeisung {{ maskiert(e.zaehlpunkt) }}</span></td>
+<td class="klein" style="min-width:150px">{% for t in z.abnehmer %}{{ t.name }}{% if not loop.last %}, {% endif %}{% else %}noch keine{% endfor %}</td>
+<td class="zahl">{{ g.preis_ct_kwh|zahl(2) }} ct<br><span class="klein">{{ "monatlich" if g.rechnung_monatlich else "jährlich" }}</span></td>
+<td class="zahl">{% if a %}{{ a.geteilt|zahl }} kWh<br><span class="klein">{{ (a.geteilt / a.einspeisung * 100 if a.einspeisung else 0)|zahl }} % der Einspeisung</span>{% else %}–{% endif %}</td>
+<td class="zahl">{% if z.offen %}{{ z.offen|zahl(2) }} €{% if z.ueberfaellig %}<br><span class="badge rot">{{ z.ueberfaellig }} überfällig</span>{% endif %}{% else %}–{% endif %}</td>
+<td style="min-width:150px">{% if a %}Daten bis {{ a.bis.strftime("%d.%m.%Y") }}{% else %}noch keine Daten{% endif %}{% if z.naechste %}<br><span class="klein">nächste: {{ z.naechste[0].strftime("%d.%m.%Y") }}–{{ z.naechste[1].strftime("%d.%m.%Y") }}</span>{% endif %}</td></tr>
+{% else %}<tr><td colspan="6">Noch keine P2P-Gruppe. Vorschläge gibt es unter <a href="/verwaltung/matching">Matching</a>.</td></tr>{% endfor %}
+</table></div>
+
+<div class="karte tabelle" id="frei"><h2>Angemeldet, noch ohne Gruppe</h2>
+<table><tr><th>Name</th><th>Rolle</th><th>Ort</th><th>Zählpunkte</th><th class="zahl">kWp / kWh</th><th>Wunschpartner</th><th>Angemeldet</th></tr>
+{% for t in frei %}<tr><td><a href="{{ bereiche[t.id] }}">{{ t.name }}</a><br><span class="klein">{{ t.email }}</span></td>
+<td>{{ "Erzeuger" if t.rolle.value == "erzeuger" else "Abnehmer" }}</td><td>{{ t.plz }} {{ t.ort }}</td>
+<td class="klein">{% if t.bezug_zp %}Bezug {{ maskiert(t.bezug_zp) }}<br>{% endif %}{% if t.einspeise_zp %}Einspeisung {{ maskiert(t.einspeise_zp) }}{% endif %}</td>
+<td class="zahl">{% if t.rolle.value == "erzeuger" %}{{ t.anlage_kwp|zahl(1) }} kWp{% else %}{{ t.jahresverbrauch_kwh|zahl }} kWh{% endif %}</td>
+<td>{% if t.einladung_von %}eingeladen von {{ namen.get(t.einladung_von, "?") }}{% elif t.wunschpartner %}{{ t.wunschpartner }}{% else %}<span class="klein">–</span>{% endif %}</td>
+<td>{{ t.erstellt.strftime("%d.%m.%Y") }}</td></tr>
+{% else %}<tr><td colspan="7">Alle Angemeldeten sind in einer Gruppe.</td></tr>{% endfor %}
+</table>{% if frei %}<p><a class="knopf zweit" href="/verwaltung/matching">Zum Matching</a></p>{% endif %}</div>
+{% endblock %}

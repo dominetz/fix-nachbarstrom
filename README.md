@@ -31,6 +31,8 @@ FIX PV handelt als bevollmächtigter Dienstleister, nicht als Organisator.
 | Diagramme je Monat und Tagesverlauf in Verwaltung und Kundenbereich | fertig |
 | Testbetrieb: erfundene Kunden, fiktives Jahr 10/2025–09/2026 als EDA-Exporte (`python demo_daten.py --neu`) | fertig |
 | Anmeldung mit Wunschnachbar, Einladung in beide Richtungen (auch Abnehmer lädt Erzeuger ein) | fertig (Stufe 3) |
+| Anmeldung fragt Zählpunkt Bezug und Einspeisung getrennt ab, GEA-Anfrage mit Zählpunkt der Anlage | fertig (Stufe 3) |
+| P2P-Übersicht in der Verwaltung: Gruppen mit Zahlen, offene Beträge, nächste Abrechnung, Angemeldete ohne Gruppe | fertig (Stufe 3) |
 | Import robust: verbundene Zellen, Wh/kWh/MWh, lange Tabellen mit Messcodes, CSV, Datum und Uhrzeit getrennt, UTC | fertig (Stufe 3) |
 | Unbekannte Spalten einmal zuordnen, die Plattform merkt sich das für jeden weiteren Export | fertig (Stufe 3) |
 | Export ohne erkennbares Ziel bleibt „geparkt“ und wird später zugeordnet, Aufbau-Bericht ohne Nummern und Namen | fertig (Stufe 3) |

@@ -5,7 +5,7 @@
 {% block inhalt %}
 {% set erz = t.rolle.value == "erzeuger" %}
 <h1>Hallo{% if t.vorname %} {{ t.vorname }}{% endif %}!</h1>
-<p class="unter">{% if gea %}Ihre Wohnung in der GEA „{{ g.titel }}“{% else %}Ihr Bereich als {{ "Erzeuger" if erz else "Abnehmer" }}{% endif %} · Zählpunkt <code>{{ maskiert(t.zaehlpunkt) }}</code></p>
+<p class="unter">{% if gea %}Ihre Wohnung in der GEA „{{ g.titel }}“{% else %}Ihr Bereich als {{ "Erzeuger" if erz else "Abnehmer" }}{% endif %} · {% if gea %}Zählpunkt{% elif erz %}Einspeisung{% else %}Bezug{% endif %} <code>{{ maskiert(t.zaehlpunkt) }}</code>{% if not gea and erz and t.zaehlpunkt_bezug %} · Bezug <code>{{ maskiert(t.zaehlpunkt_bezug) }}</code>{% endif %}{% if not gea and not erz and t.zaehlpunkt_einspeisung %} · Einspeisung <code>{{ maskiert(t.zaehlpunkt_einspeisung) }}</code>{% endif %}</p>
 
 {% if aufgaben %}<div class="karte" style="border-color:#f0d9a0;background:var(--gelb-hell)"><h2>Zu erledigen</h2><ul class="aufgaben">
 {% for text, link in aufgaben %}<li><span>{{ text }}</span>{% if link %}<a class="knopf klein-knopf" href="{{ link }}">Jetzt erledigen</a>{% endif %}</li>{% endfor %}</ul></div>{% endif %}

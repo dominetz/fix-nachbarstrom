@@ -19,9 +19,22 @@
 <div><label>E-Mail</label><input type="email" name="email" required value="{{ werte.email }}"></div>
 <div><label>Telefon (für Erinnerungen per SMS)</label><input name="telefon" value="{{ werte.telefon }}"></div>
 </div>
-<label>Zählpunktnummer {% if rolle.value == "erzeuger" %}der Einspeisung{% endif %}</label>
-<input name="zaehlpunkt" required placeholder="AT00…" value="{{ werte.zaehlpunkt }}">
-<p class="klein">33 Stellen, beginnt mit AT. Steht auf Ihrer Netzrechnung oder im Kundenportal des Netzbetreibers.</p>
+{% if rolle.value == "erzeuger" %}
+<div class="raster">
+<div><label>Zählpunktnummer Einspeisung</label><input name="zaehlpunkt" required placeholder="AT00…" value="{{ werte.zaehlpunkt }}">
+<p class="klein">Über diesen Zählpunkt speist Ihre PV-Anlage ins Netz ein. Er wird geteilt.</p></div>
+<div><label>Zählpunktnummer Bezug</label><input name="zaehlpunkt_bezug" placeholder="AT00…" value="{{ werte.zaehlpunkt_bezug or '' }}">
+<p class="klein">Ihr Zählpunkt für den Strombezug im Haushalt oder Betrieb.</p></div>
+</div>
+{% else %}
+<div class="raster">
+<div><label>Zählpunktnummer Bezug</label><input name="zaehlpunkt" required placeholder="AT00…" value="{{ werte.zaehlpunkt }}">
+<p class="klein">Ihr Zählpunkt für den Strombezug. Auf ihn wird der Sonnenstrom vom Nachbarn angerechnet.</p></div>
+<div><label>Zählpunktnummer Einspeisung (nur mit eigener PV-Anlage)</label><input name="zaehlpunkt_einspeisung" placeholder="AT00…" value="{{ werte.zaehlpunkt_einspeisung or '' }}">
+<p class="klein">Leer lassen, wenn Sie keine PV-Anlage haben.</p></div>
+</div>
+{% endif %}
+<p class="klein">Zählpunktnummern haben 33 Stellen und beginnen mit AT. Sie stehen auf Ihrer Netzrechnung oder im Kundenportal des Netzbetreibers. Bezug und Einspeisung haben getrennte Nummern.</p>
 <div class="raster">
 <div><label>Nahebereichs-ID Trafostation (optional)</label><input name="trafo_id" value="{{ werte.trafo_id }}"></div>
 <div><label>Nahebereichs-ID Umspannwerk (optional)</label><input name="umspannwerk_id" value="{{ werte.umspannwerk_id }}"></div>

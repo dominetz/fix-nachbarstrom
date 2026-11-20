@@ -165,12 +165,14 @@ def anmelden(request: Request, s: Session = Depends(sitzung),
              rolle: Rolle = Form(...), vorname: str = Form(...), nachname: str = Form(...),
              firma: str = Form(""), strasse: str = Form(...), plz: str = Form(...), ort: str = Form(...),
              email: str = Form(...), telefon: str = Form(""), zaehlpunkt: str = Form(...),
+             zaehlpunkt_bezug: str = Form(""), zaehlpunkt_einspeisung: str = Form(""),
              trafo_id: str = Form(""), umspannwerk_id: str = Form(""),
              profiltyp: Profiltyp = Form(Profiltyp.HAUSHALT), jahresverbrauch_kwh: float = Form(0),
              anlage_kwp: float = Form(0), einwilligung: bool = Form(False), einladung: str = Form(""),
              wunschpartner: str = Form("")):
     werte = dict(vorname=vorname, nachname=nachname, firma=firma, strasse=strasse, plz=plz, ort=ort,
-                 email=email, telefon=telefon, zaehlpunkt=zaehlpunkt, trafo_id=trafo_id,
+                 email=email, telefon=telefon, zaehlpunkt=zaehlpunkt, zaehlpunkt_bezug=zaehlpunkt_bezug,
+                 zaehlpunkt_einspeisung=zaehlpunkt_einspeisung, trafo_id=trafo_id,
                  umspannwerk_id=umspannwerk_id, jahresverbrauch_kwh=jahresverbrauch_kwh, anlage_kwp=anlage_kwp,
                  wunschpartner=wunschpartner)
     fehler = []
@@ -179,6 +181,13 @@ def anmelden(request: Request, s: Session = Depends(sitzung),
         fehler.append("Die Zählpunktnummer hat 33 Stellen und beginnt mit AT. Sie steht auf der Netzrechnung.")
     elif s.exec(select(Teilnehmer).where(Teilnehmer.zaehlpunkt == zp)).first():
         fehler.append("Dieser Zählpunkt ist schon angemeldet.")
+    # zweiter Zählpunkt: beim Erzeuger der Bezug, beim Abnehmer die Einspeisung einer eigenen PV-Anlage
+    zweit_text = "Bezug" if rolle == Rolle.ERZEUGER else "Einspeisung"
+    zweit = normalisieren(zaehlpunkt_bezug if rolle == Rolle.ERZEUGER else zaehlpunkt_einspeisung)
+    if zweit and not ist_gueltig(zweit):
+        fehler.append(f"Die Zählpunktnummer für die {zweit_text} stimmt nicht. Sie hat 33 Stellen und beginnt mit AT.")
+    elif zweit and zweit == zp:
+        fehler.append("Bezug und Einspeisung haben verschiedene Zählpunktnummern. Bitte beide prüfen.")
     if not einwilligung:
         fehler.append("Ohne Einwilligung zur Datennutzung können wir keinen Partner suchen.")
     if rolle == Rolle.ERZEUGER and anlage_kwp <= 0:
@@ -195,6 +204,8 @@ def anmelden(request: Request, s: Session = Depends(sitzung),
     t = Teilnehmer(rolle=rolle, vorname=vorname.strip(), nachname=nachname.strip(), firma=firma.strip() or None,
                    strasse=strasse.strip(), plz=plz.strip(), ort=ort.strip(), email=email.strip(),
                    telefon=telefon.strip() or None, zaehlpunkt=zp, netzbetreiber=netzbetreiber_code(zp),
+                   zaehlpunkt_bezug=(zweit or None) if rolle == Rolle.ERZEUGER else None,
+                   zaehlpunkt_einspeisung=(zweit or None) if rolle == Rolle.ABNEHMER else None,
                    trafo_id=trafo_id.strip() or None, umspannwerk_id=umspannwerk_id.strip() or None,
                    profiltyp=profiltyp, jahresverbrauch_kwh=jahresverbrauch_kwh, anlage_kwp=anlage_kwp,
                    einladung_von=e.erzeuger_id if e else None, wunschpartner=wunschpartner.strip() or None,
@@ -239,17 +250,23 @@ def gea_info(request: Request):
 def gea_anfrage(request: Request, s: Session = Depends(sitzung), vorname: str = Form(...), nachname: str = Form(...),
                 firma: str = Form(""), email: str = Form(...), telefon: str = Form(""), strasse: str = Form(...),
                 plz: str = Form(...), ort: str = Form(...), wohnungen: int = Form(0), anlage_kwp: float = Form(0),
-                registriert: str = Form("nein"), gemeinschafts_id: str = Form(""), modell: str = Form("selbst"),
-                nachricht: str = Form(""), einwilligung: bool = Form(False)):
+                anlage_zp: str = Form(""), registriert: str = Form("nein"), gemeinschafts_id: str = Form(""),
+                modell: str = Form("selbst"), nachricht: str = Form(""), einwilligung: bool = Form(False)):
     werte = dict(vorname=vorname, nachname=nachname, firma=firma, email=email, telefon=telefon, strasse=strasse,
-                 plz=plz, ort=ort, wohnungen=wohnungen, anlage_kwp=anlage_kwp, registriert=registriert,
-                 gemeinschafts_id=gemeinschafts_id, modell=modell, nachricht=nachricht)
+                 plz=plz, ort=ort, wohnungen=wohnungen, anlage_kwp=anlage_kwp, anlage_zp=anlage_zp,
+                 registriert=registriert, gemeinschafts_id=gemeinschafts_id, modell=modell, nachricht=nachricht)
+    anlage_zp = normalisieren(anlage_zp)
+    if anlage_zp and not ist_gueltig(anlage_zp):
+        return _seite(request, "gea_info.html", werte=werte,
+                      fehler="Die Zählpunktnummer der Anlage stimmt nicht. Sie hat 33 Stellen und beginnt mit AT. "
+                             "Wenn Sie sie nicht zur Hand haben, lassen Sie das Feld leer.")
     if not einwilligung:
         return _seite(request, "gea_info.html", werte=werte,
                       fehler="Bitte bestätigen Sie, dass wir Ihre Angaben für die Anfrage nutzen dürfen.")
     a = Anfrage(art="gea", vorname=vorname.strip(), nachname=nachname.strip(), firma=firma.strip() or None,
                 email=email.strip(), telefon=telefon.strip() or None, strasse=strasse.strip(), plz=plz.strip(),
-                ort=ort.strip(), wohnungen=wohnungen, anlage_kwp=anlage_kwp, registriert=registriert,
+                ort=ort.strip(), wohnungen=wohnungen, anlage_kwp=anlage_kwp, anlage_zp=anlage_zp or None,
+                registriert=registriert,
                 gemeinschafts_id=normalisieren(gemeinschafts_id) or None,
                 modell=modell if modell in ("selbst", "verwaltet") else "selbst",
                 nachricht=nachricht.strip() or None, einwilligung_zeit=jetzt())
@@ -420,6 +437,38 @@ def _auswertung_mehrere(s: Session, gruppen: list[Gruppe]) -> dict | None:
     return {"bis": bis, "einspeisung": sum(geteilt) + sum(rest), "geteilt": sum(geteilt),
             "diagramm": diagramme.balken([diagramme.monatsname(k) for k in schluessel], [
                 ("Geteilt bzw. im Haus genutzt", "--reihe-1", geteilt), ("Rest ins Netz eingespeist", "--reihe-grau", rest)])}
+
+
+@app.get("/verwaltung/p2p", response_class=HTMLResponse)
+def p2p_liste(request: Request, s: Session = Depends(sitzung), _=Depends(verwaltung)):
+    """Alle P2P-Gruppen mit Zahlen und alle Angemeldeten, die noch keine Gruppe haben."""
+    heute = date.today()
+    zeilen = []
+    for g in s.exec(select(Gruppe).where(Gruppe.art == Art.P2P).order_by(Gruppe.id)).all():
+        e = s.get(Teilnehmer, g.erzeuger_id)
+        abnehmer = [t for _, t in importe.mitglieder(s, g)]
+        a = _auswertung(s, e, abnehmer, g.id)
+        offen = [r for r in s.exec(select(Rechnung).where(Rechnung.gruppe_id == g.id)).all() if not r.bezahlt_am]
+        naechste = abrechnungs_vorschlag(s, g) if g.status == GruppenStatus.AKTIV else None
+        zeilen.append({"g": g, "e": e, "abnehmer": abnehmer, "a": a, "naechste": naechste,
+                       "offen": sum(r.brutto for r in offen),
+                       "ueberfaellig": sum(1 for r in offen if rechnung_status(r, heute) == "überfällig")})
+    belegt = _in_aktiver_gruppe(s)
+    in_gea = {t.id for g in s.exec(select(Gruppe).where(Gruppe.art == Art.GEA)).all()
+              for t in importe.zaehlpunkte(s, g).values()}
+    alle = s.exec(select(Teilnehmer).order_by(Teilnehmer.erstellt)).all()
+    p2p_teilnehmer = [t for t in alle if t.id not in in_gea or t.id in belegt]
+    frei = [t for t in p2p_teilnehmer if t.id not in belegt]
+    namen = {t.id: t.name for t in alle}
+    aktiv = [z for z in zeilen if z["g"].status == GruppenStatus.AKTIV]
+    k = {"aktiv": len(aktiv), "in_arbeit": sum(1 for z in zeilen if z["g"].status not in
+                                               (GruppenStatus.AKTIV, GruppenStatus.BEENDET)),
+         "erzeuger": sum(1 for t in p2p_teilnehmer if t.rolle == Rolle.ERZEUGER),
+         "abnehmer": sum(1 for t in p2p_teilnehmer if t.rolle == Rolle.ABNEHMER),
+         "frei": len(frei), "geteilt": sum(z["a"]["geteilt"] for z in aktiv if z["a"]),
+         "offen": sum(z["offen"] for z in zeilen), "ueberfaellig": sum(z["ueberfaellig"] for z in zeilen)}
+    return _seite(request, "p2p_liste.html", zeilen=zeilen, frei=frei, k=k, namen=namen,
+                  bereiche={t.id: kundenlink(t.id) for t in frei})
 
 
 @app.get("/verwaltung/teilnehmer", response_class=HTMLResponse)
@@ -983,7 +1032,8 @@ def gea_neu_seite(request: Request, s: Session = Depends(sitzung), _=Depends(ver
     if a:
         werte.update(vorname=a.vorname, nachname=a.nachname, firma=a.firma or "", email=a.email,
                      telefon=a.telefon or "", strasse=a.strasse or "", plz=a.plz or "", ort=a.ort or "",
-                     anlage_kwp=a.anlage_kwp, gemeinschafts_id=a.gemeinschafts_id or "", modell=a.modell or "selbst",
+                     anlage_kwp=a.anlage_kwp, anlage_zp=a.anlage_zp or "", gemeinschafts_id=a.gemeinschafts_id or "",
+                     modell=a.modell or "selbst",
                      name=f"GEA {a.strasse}, {a.ort}" if a.strasse else "", status="vorschlag")
     erkannt = None
     u = s.exec(select(Upload).where(Upload.token == upload)).first() if upload else None

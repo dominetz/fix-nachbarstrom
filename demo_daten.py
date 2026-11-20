@@ -90,6 +90,7 @@ def anlegen(neu: bool = False) -> None:
             t = Teilnehmer(rolle=rolle, vorname=vor, nachname=nach, firma=firma, strasse=f"Beispielweg {i}",
                            plz={"Feldkirch": "6800", "Rankweil": "6830", "Götzis": "6840", "Altach": "6844"}[ORTE[i - 1]],
                            ort=ORTE[i - 1], email=f"demo{i}@example.com", zaehlpunkt=zp(i), netzbetreiber=NB,
+                           zaehlpunkt_bezug=zp(900 + i) if rolle == Rolle.ERZEUGER else None,
                            trafo_id=trafo, umspannwerk_id="UW-1", profiltyp=profil, jahresverbrauch_kwh=kwh,
                            anlage_kwp=kwp, einwilligung_daten=True, einwilligung_zeit=jetzt(),
                            iban=iban("20111", f"{i:011d}") if rolle == Rolle.ERZEUGER else None)

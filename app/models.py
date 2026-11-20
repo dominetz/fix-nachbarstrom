@@ -79,7 +79,9 @@ class Teilnehmer(SQLModel, table=True):
     ort: str
     email: str
     telefon: Optional[str] = None
-    zaehlpunkt: str = Field(index=True, unique=True)
+    zaehlpunkt: str = Field(index=True, unique=True)  # Erzeuger: Einspeisung, Abnehmer und Wohnung: Bezug
+    zaehlpunkt_bezug: Optional[str] = None  # Erzeuger: Zählpunkt für den eigenen Strombezug
+    zaehlpunkt_einspeisung: Optional[str] = None  # Abnehmer mit eigener PV-Anlage
     netzbetreiber: str  # 6-stellige Kennung aus dem Zählpunkt
     trafo_id: Optional[str] = None  # Nahebereichs-ID Trafostation
     umspannwerk_id: Optional[str] = None  # Nahebereichs-ID Umspannwerk
@@ -93,6 +95,14 @@ class Teilnehmer(SQLModel, table=True):
     einwilligung_daten: bool = False
     einwilligung_zeit: Optional[datetime] = None
     erstellt: datetime = Field(default_factory=jetzt)
+
+    @property
+    def bezug_zp(self) -> Optional[str]:
+        return self.zaehlpunkt_bezug if self.rolle == Rolle.ERZEUGER else self.zaehlpunkt
+
+    @property
+    def einspeise_zp(self) -> Optional[str]:
+        return self.zaehlpunkt if self.rolle == Rolle.ERZEUGER else self.zaehlpunkt_einspeisung
 
     @property
     def name(self) -> str:
@@ -262,6 +272,7 @@ class Anfrage(SQLModel, table=True):
     ort: Optional[str] = None
     wohnungen: int = 0  # GEA: Anzahl Wohnungen im Haus
     anlage_kwp: float = 0
+    anlage_zp: Optional[str] = None  # GEA: Einspeise-Zählpunkt der Anlage, falls bekannt
     registriert: str = "nein"  # GEA schon auf ebUtilities registriert: ja, nein, weiss_nicht
     gemeinschafts_id: Optional[str] = None
     modell: Optional[str] = None  # gewünscht: verwaltet oder selbst

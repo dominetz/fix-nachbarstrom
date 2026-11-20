@@ -27,7 +27,7 @@
 <div class="karte"><h2>Teilnehmer</h2>
 <div class="tabelle"><table><tr><th>Name</th><th class="zahl">12 Monate</th><th>Unterschrift</th><th>Zustimmung im Netzportal</th></tr>
 {% for t in alle %}{% set z = zustimmungen.get(t.id) %}{% set w = a.je_zp.get(t.zaehlpunkt) if a else None %}<tr>
-<td><a href="{{ bereiche[t.id] }}" title="Kundenbereich öffnen">{{ t.name }}</a><br><span class="klein">{{ "Erzeuger" if t.rolle.value == "erzeuger" else "Abnehmer" }} · {{ maskiert(t.zaehlpunkt) }}{% if t.rolle.value == "erzeuger" %} · IBAN {{ "✓" if t.iban else "fehlt" }}{% endif %}</span></td>
+<td><a href="{{ bereiche[t.id] }}" title="Kundenbereich öffnen">{{ t.name }}</a><br><span class="klein">{{ "Erzeuger, Einspeisung" if t.rolle.value == "erzeuger" else "Abnehmer, Bezug" }} {{ maskiert(t.zaehlpunkt) }}{% if t.rolle.value == "erzeuger" %} · IBAN {{ "✓" if t.iban else "fehlt" }}{% endif %}</span></td>
 <td class="zahl">{% if w %}{% if t.rolle.value == "erzeuger" %}{{ (w.erzeugung - w.restueberschuss)|zahl }} kWh geteilt{% else %}{{ w.eigendeckung|zahl }} von {{ w.verbrauch|zahl }} kWh<br><span class="klein">{{ (w.eigendeckung / w.verbrauch * 100 if w.verbrauch else 0)|zahl }} % Sonnenstrom</span>{% endif %}{% else %}–{% endif %}</td>
 <td>{% if t.id in unterschriften %}<span class="badge ok">unterschrieben</span>{% else %}<span class="badge warn">offen</span><details class="klein"><summary>Link</summary><code>{{ links[t.id] }}</code></details>{% endif %}</td>
 <td><form method="post" action="/verwaltung/gruppe/{{ g.id }}/zustimmung" class="zeile"><input type="hidden" name="teilnehmer_id" value="{{ t.id }}">
