@@ -860,3 +860,52 @@ def test_p2p_uebersicht(client):
     gruppen, frei = seite.split('id="frei"')
     assert "/verwaltung/gruppe/1" in gruppen and "noch keine Daten" in gruppen
     assert "Familie Sonne" in frei and "1 noch ohne Gruppe" in gruppen
+
+
+def test_passwort_nur_als_hash():
+    from app import sicherheit
+    h = sicherheit.passwort_hash("richtig-und-lang", iterationen=1000)
+    assert h.startswith("pbkdf2_sha256:1000:") and "richtig" not in h and "$" not in h
+    assert sicherheit.passwort_pruefen("richtig-und-lang", h)
+    assert sicherheit.passwort_pruefen("richtig-und-lang", h)  # zweites Mal aus dem Zwischenspeicher
+    assert not sicherheit.passwort_pruefen("falsch", h)
+    assert not sicherheit.passwort_pruefen("richtig-und-lang", "kaputt")
+    assert not sicherheit.passwort_pruefen("richtig-und-lang", "md5:1:aa:bb")
+
+
+def test_verwaltung_mit_hash_und_sperre(client, monkeypatch):
+    from app import config, sicherheit
+    c, _ = client
+    monkeypatch.setattr(config, "ADMIN_PASSWORT", "")
+    monkeypatch.setattr(config, "ADMIN_PASSWORT_HASH", sicherheit.passwort_hash("geheim-1234567", iterationen=1000))
+    monkeypatch.setattr(main, "sperre", sicherheit.Sperre(versuche=3, fenster=900))
+    assert c.get("/verwaltung", auth=("admin", "geheim-1234567")).status_code == 200
+    assert c.get("/verwaltung", auth=("admin", "test")).status_code == 401  # Klartext gilt nicht mehr
+    assert c.get("/verwaltung", auth=("jemand", "geheim-1234567")).status_code == 401
+    assert c.get("/verwaltung", auth=("admin", "falsch")).status_code == 401
+    r = c.get("/verwaltung", auth=("admin", "geheim-1234567"))
+    assert r.status_code == 429 and "15 Minuten" in r.text
+    main.sperre.erfolg("testclient")
+    assert c.get("/verwaltung", auth=("admin", "geheim-1234567")).status_code == 200
+
+
+def test_sicherheits_kopfzeilen_und_rechtsseiten(client, monkeypatch):
+    from app import config
+    c, _ = client
+    start = c.get("/")
+    assert start.headers["x-content-type-options"] == "nosniff"
+    assert start.headers["x-frame-options"] == "DENY"
+    assert start.headers["referrer-policy"] == "same-origin"
+    assert "x-robots-tag" not in start.headers
+    assert "googleapis" not in start.text and "/static/schrift/rubik-latin-400-normal.woff2" in start.text
+    assert 'href="/impressum"' in start.text and 'href="/datenschutz"' in start.text
+    assert c.get("/static/schrift/rubik-latin-700-normal.woff2").status_code == 200
+    assert "noindex" in c.get("/verwaltung").headers["x-robots-tag"]
+    assert "noindex" in c.get("/mein/irgendwas").headers["x-robots-tag"]
+    assert c.get("/docs").status_code == 404 and c.get("/openapi.json").status_code == 404
+    for seite in ("/impressum", "/datenschutz"):
+        r = c.get(seite)
+        assert r.status_code == 200 and "Entwurf" in r.text and config.DIENSTLEISTER["firma"] in r.text
+    monkeypatch.setattr(config, "RECHTSTEXTE_GEPRUEFT", True)
+    assert "Entwurf" not in c.get("/datenschutz").text
+    assert "set-cookie" not in start.headers

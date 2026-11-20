@@ -23,10 +23,12 @@ from pathlib import Path
 from fastapi import Depends, FastAPI, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
+from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import delete, inspect, text
 from sqlmodel import Session, SQLModel, create_engine, select
 
+from . import sicherheit as schutz
 from . import (abrechnung, auswertung, config, diagramme, eda_import, energiedaten, gea, gebuehren, importe,
                matching, nachrichten, zahlung)
 from .erinnerungen import faellige_erinnerungen
@@ -70,7 +72,24 @@ def _spalten_ergaenzen():
                     v.execute(text(f"ALTER TABLE {tabelle.name} ADD COLUMN {spalte.name} {typ}{zusatz}"))
 
 
-app = FastAPI(title=config.MARKE, lifespan=_lebenszyklus)
+app = FastAPI(title=config.MARKE, lifespan=_lebenszyklus, docs_url=None, redoc_url=None, openapi_url=None)
+app.mount("/static", StaticFiles(directory=str(Path(__file__).parent / "static")), name="static")
+
+_OEFFENTLICH = ("/", "/gea", "/anfrage", "/anmelden", "/impressum", "/datenschutz")
+
+
+@app.middleware("http")
+async def _kopfzeilen(request: Request, call_next):
+    """Sicherheits-Kopfzeilen. Persönliche Links tragen ein Token in der Adresse: die
+    Adresse geht deshalb nicht an fremde Seiten weiter, und nur die öffentlichen
+    Seiten dürfen in Suchmaschinen."""
+    antwort = await call_next(request)
+    antwort.headers.setdefault("X-Content-Type-Options", "nosniff")
+    antwort.headers.setdefault("X-Frame-Options", "DENY")
+    antwort.headers.setdefault("Referrer-Policy", "same-origin")
+    if request.url.path not in _OEFFENTLICH and not request.url.path.startswith("/static/"):
+        antwort.headers.setdefault("X-Robots-Tag", "noindex, nofollow")
+    return antwort
 vorlagen = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 
 
@@ -96,12 +115,29 @@ def sitzung():
         yield s
 
 
-def verwaltung(cred: HTTPBasicCredentials = Depends(sicherheit)):
-    ok = (config.ADMIN_PASSWORT
-          and hmac.compare_digest(cred.username, config.ADMIN_BENUTZER)
-          and hmac.compare_digest(cred.password, config.ADMIN_PASSWORT))
+sperre = schutz.Sperre()
+
+
+def _adresse(request: Request) -> str:
+    """Adresse des Besuchers. Hinter dem Webserver (Caddy) setzt uvicorn sie aus X-Forwarded-For."""
+    return request.client.host if request.client else "unbekannt"
+
+
+def _passwort_ok(passwort: str) -> bool:
+    if config.ADMIN_PASSWORT_HASH:
+        return schutz.passwort_pruefen(passwort, config.ADMIN_PASSWORT_HASH)
+    return bool(config.ADMIN_PASSWORT) and hmac.compare_digest(passwort, config.ADMIN_PASSWORT)
+
+
+def verwaltung(request: Request, cred: HTTPBasicCredentials = Depends(sicherheit)):
+    adresse = _adresse(request)
+    if sperre.gesperrt(adresse):
+        raise HTTPException(429, "Zu viele falsche Anmeldungen. Bitte in 15 Minuten nochmal versuchen.")
+    ok = hmac.compare_digest(cred.username, config.ADMIN_BENUTZER) & _passwort_ok(cred.password)
     if not ok:
+        sperre.fehlversuch(adresse)
         raise HTTPException(401, "Nicht angemeldet", headers={"WWW-Authenticate": "Basic"})
+    sperre.erfolg(adresse)
     return cred.username
 
 
@@ -275,6 +311,16 @@ def gea_anfrage(request: Request, s: Session = Depends(sitzung), vorname: str = 
     return _seite(request, "anfrage_danke.html", a=a)
 
 
+@app.get("/impressum", response_class=HTMLResponse)
+def impressum(request: Request):
+    return _seite(request, "impressum.html", gepr=config.RECHTSTEXTE_GEPRUEFT)
+
+
+@app.get("/datenschutz", response_class=HTMLResponse)
+def datenschutz(request: Request):
+    return _seite(request, "datenschutz.html", gepr=config.RECHTSTEXTE_GEPRUEFT)
+
+
 @app.get("/anfrage", response_class=HTMLResponse)
 def anfrage_formular(request: Request, art: str = "frage"):
     return _seite(request, "anfrage.html", art=art if art in ("p2p", "frage") else "frage", fehler=None, werte={})
@@ -312,7 +358,7 @@ def unterschreiben(request: Request, gid: int, tid: int, token: str, s: Session 
     g, t = _pruefe_unterschrift(s, gid, tid, token)
     if not gelesen or name_getippt.strip().lower() != f"{t.vorname} {t.nachname}".lower():
         raise HTTPException(400, "Bitte Häkchen setzen und Vor- und Nachnamen genau so eintippen.")
-    ip = request.client.host if request.client else None
+    ip = _adresse(request)
     for dok in ("vertrag", "vollmacht"):
         s.add(Unterschrift(gruppe_id=gid, teilnehmer_id=tid, dokument=dok, name_getippt=name_getippt.strip(), ip=ip))
     s.commit()

@@ -1,0 +1,8 @@
+[Unit]
+Description=Sicherung Fix Nachbarstrom
+
+[Service]
+Type=oneshot
+User=nachbarstrom
+Group=nachbarstrom
+ExecStart=/usr/local/sbin/nachbarstrom-sicherung

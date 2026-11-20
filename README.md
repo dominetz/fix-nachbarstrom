@@ -78,6 +78,44 @@ uvicorn app.main:app --port 8000
 
 Weitere Einstellungen in `app/config.py` (Firmendaten, Frist für die Zustimmung, Basis-URL).
 
+## Online betreiben (eigener Server in der EU)
+
+Ein kleiner Linux-Server (Ubuntu 24.04 oder Debian 12) reicht. Die Plattform läuft dort als Dienst, Caddy davor sorgt für HTTPS mit einem Let's-Encrypt-Zertifikat. Alles liegt im Ordner `deploy/`.
+
+**Vorher (einmalig, macht ihr selbst):**
+
+1. Server beim Anbieter bestellen, Standort EU, eigenen SSH-Schlüssel hinterlegen. Auftragsverarbeitungsvertrag (AVV) mit dem Anbieter abschließen.
+2. DNS: einen A-Eintrag (und bei IPv6 einen AAAA-Eintrag) für z. B. `nachbarstrom.fix-pv.com` auf die IP des Servers setzen.
+
+**Einrichten (vom Windows-PC aus, im Ordner der Plattform):**
+
+```powershell
+.\deploy\hochladen.ps1 -Server <IP des Servers> -Einrichten
+```
+
+Das lädt den eingecheckten Stand hoch (nie Datenbank oder Schlüssel vom PC) und startet `deploy/einrichten.sh`. Das Skript fragt nach Domain und Verwaltungspasswort (gespeichert wird nur ein Hash) und fragt einzeln, ob Firewall, tägliche Sicherung und der erfundene Testbetrieb dazukommen sollen.
+
+**Updates:** `.\deploy\hochladen.ps1 -Server <IP>`. Vorher wird die Datenbank gesichert. Startet die neue Version nicht, bietet das Skript an, zur vorigen zurückzugehen.
+
+**Auf dem Server:**
+
+| Was | Wo |
+|---|---|
+| Code | `/opt/nachbarstrom` (vorige Version: `/opt/nachbarstrom.vorher`) |
+| Datenbank, Schlüssel für persönliche Links | `/var/lib/nachbarstrom` |
+| Sicherungen | `/var/lib/nachbarstrom/sicherung` (manuell: `sudo -u nachbarstrom nachbarstrom-sicherung`) |
+| Einstellungen, Firmendaten | `/etc/nachbarstrom/nachbarstrom.env`, danach `systemctl restart nachbarstrom` |
+| Passwort ändern | `bash /opt/nachbarstrom/deploy/passwort.sh` |
+| Protokoll | `journalctl -u nachbarstrom` |
+
+Die Sicherungen liegen auf demselben Server. Für den Fall, dass der Server ausfällt, zusätzlich die Sicherung des Anbieters buchen oder die Dateien regelmäßig herunterladen.
+
+Vom Testbetrieb in den Echtbetrieb: `systemctl stop nachbarstrom`, `/var/lib/nachbarstrom/nachbarstrom.db` wegsichern (umbenennen), `systemctl start nachbarstrom`. Die Plattform beginnt dann mit einer leeren Datenbank.
+
+**Schutz:** Die Verwaltung ist nur mit Passwort erreichbar, nach 10 falschen Versuchen ist die Adresse 15 Minuten gesperrt. Persönliche Links und die Verwaltung erscheinen nicht in Suchmaschinen. Schriften kommen vom eigenen Server, es werden keine Inhalte von fremden Servern geladen und keine Cookies gesetzt.
+
+**Impressum und Datenschutz** (`/impressum`, `/datenschutz`) sind Entwürfe mit Platzhaltern. Firmendaten in der Einstellungsdatei eintragen, Texte rechtlich prüfen lassen und erst dann `NACHBARSTROM_RECHTSTEXTE_GEPRUEFT=ja` setzen. Bis dahin steht auf beiden Seiten ein Entwurfshinweis.
+
 ## Tests
 
 ```bash

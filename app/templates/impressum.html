@@ -1,0 +1,12 @@
+{% extends "basis.html" %}
+{% block titel %}Impressum · {{ marke }}{% endblock %}
+{% block inhalt %}
+{% if not gepr %}<div class="fehler">Entwurf: Impressum vor dem Start mit den Firmendaten füllen und prüfen lassen.</div>{% endif %}
+<h1>Impressum</h1>
+<div class="karte">
+<p><b>{{ dienstleister.firma }}</b><br>{{ dienstleister.adresse }}</p>
+<p>Firmenbuchnummer: {{ dienstleister.fn }}<br>Firmenbuchgericht: {{ dienstleister.gericht }}<br>UID: {{ dienstleister.uid }}<br>Geschäftsführung: {{ dienstleister.geschaeftsfuehrung }}</p>
+<p>E-Mail: {{ dienstleister.email }}<br>Telefon: {{ dienstleister.telefon }}</p>
+<p class="klein">{{ marke }} ist ein Service der {{ dienstleister.firma }}. {{ dienstleister.firma }} vermittelt Partner für das Teilen von Strom, erstellt Verträge, bereitet die Anmeldung beim Netzbetreiber vor und rechnet im Auftrag ab.</p>
+</div>
+{% endblock %}
