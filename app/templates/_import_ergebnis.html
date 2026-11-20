@@ -1,0 +1,27 @@
+{# Ergebnis eines oder mehrerer Imports. Erwartet: ergebnisse #}
+<div class="karte"><h2>Import</h2>
+{% for e in ergebnisse %}
+<div style="padding:10px 0;border-bottom:1px solid var(--linie)">
+<b>{{ e.datei }}</b>
+{% if e.fehler %}
+ <span class="badge rot">nicht lesbar</span>
+ <p>{{ e.fehler }}</p>
+ <details><summary class="klein">Aufbau der Datei anzeigen (ohne Zählpunktnummern und Namen, zum Weitergeben)</summary><pre style="white-space:pre-wrap;font-size:.8rem;background:var(--hell);padding:10px;border-radius:8px">{{ e.bericht }}</pre></details>
+{% elif e.zuordnen %}
+ <span class="badge warn">Spalten zuordnen</span>
+ <p>{{ e.anzahl_zp }} Zählpunkte, {{ e.von.strftime("%d.%m.%Y") }} – {{ e.bis.strftime("%d.%m.%Y") }}. Diese Spalten kennt die Plattform noch nicht: {{ e.unbekannt|join(", ") }}.</p>
+ <a class="knopf klein-knopf" href="/verwaltung/import/{{ e.zuordnen }}">Jetzt zuordnen</a>
+{% elif e.ohne_ziel %}
+ <span class="badge warn">Gemeinschaft wählen</span>
+ <p>{{ e.anzahl_zp }} Zählpunkte, {{ e.von.strftime("%d.%m.%Y") }} – {{ e.bis.strftime("%d.%m.%Y") }}{% if e.gemeinschafts_id %}, Gemeinschafts-ID {{ e.gemeinschafts_id }}{% endif %}. Keine Gruppe oder GEA passt eindeutig ({{ e.grund }}).</p>
+ <a class="knopf klein-knopf" href="/verwaltung/gea/neu?upload={{ e.ohne_ziel }}">Als neue GEA anlegen</a> <a class="knopf zweit klein-knopf" href="/verwaltung/import/{{ e.ohne_ziel }}">Bestehender Gemeinschaft zuordnen</a>
+{% else %}
+ <span class="badge ok">importiert</span>
+ <p>{{ e.von.strftime("%d.%m.%Y") }} – {{ e.bis.strftime("%d.%m.%Y") }} · {{ e.zaehlpunkte }} Zählpunkte · {{ e.werte|zahl }} Werte · in <a href="{{ gruppenlink(e.gruppe) }}">{{ e.gruppe.titel }}</a> ({{ e.erkannt }})</p>
+ {% if e.neu %}<p class="klein">Neu als Wohnung aufgenommen: {{ e.neu|join(", ") }}. Namen bitte in der GEA nachtragen.</p>{% endif %}
+ {% if e.unbekannt %}<p class="klein"><span class="badge warn">{{ e.unbekannt|length }} Zählpunkte gehören nicht zur Gruppe und wurden übersprungen</span> {{ e.unbekannt|join(", ") }}</p>{% endif %}
+ {% for h in e.hinweise %}<p class="klein">{{ h }}</p>{% endfor %}
+{% endif %}
+</div>
+{% endfor %}
+</div>

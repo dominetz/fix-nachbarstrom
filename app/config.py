@@ -14,7 +14,13 @@ DIENSTLEISTER = {
     "adresse": os.environ.get("NACHBARSTROM_FIRMA_ADRESSE", "[Adresse eintragen]"),
     "fn": os.environ.get("NACHBARSTROM_FIRMA_FN", "[Firmenbuchnummer eintragen]"),
     "email": os.environ.get("NACHBARSTROM_FIRMA_EMAIL", "office@fix-pv.com"),
+    "uid": os.environ.get("NACHBARSTROM_FIRMA_UID", "[UID eintragen]"),
+    "iban": os.environ.get("NACHBARSTROM_FIRMA_IBAN", ""),  # für den QR-Code auf Gebührenrechnungen
 }
+# Umsatzsteuer auf die Servicegebühr von FIX (GmbH, Regelbesteuerung angenommen, mit Steuerberater klären)
+DIENSTLEISTER_UST = float(os.environ.get("NACHBARSTROM_FIRMA_UST", "0.20"))
+# Vorschlag für neue Gruppen und GEAs, in jeder Gruppe einzeln änderbar
+GEBUEHR_STANDARD_CT_KWH = float(os.environ.get("NACHBARSTROM_GEBUEHR_CT_KWH", "1.0"))
 
 # Frist für die Zustimmung im Netzportal. Koordinationsstelle: 30 Tage.
 # Laut Handbuch von Vorarlberg Netz 7 Tage, dort noch bestätigen lassen.

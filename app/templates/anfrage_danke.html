@@ -1,0 +1,6 @@
+{% extends "basis.html" %}
+{% block inhalt %}
+<h1>Danke, {{ a.vorname }}!</h1>
+<p>Ihre {{ "Anfrage zur GEA" if a.art == "gea" else "Nachricht" }} ist bei uns angekommen. Wir melden uns per E-Mail an {{ a.email }}.</p>
+<p><a class="knopf zweit" href="/">Zur Startseite</a></p>
+{% endblock %}

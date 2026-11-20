@@ -1,0 +1,66 @@
+{% extends "basis.html" %}
+{% import "_status.html" as status %}
+{% block titel %}Mein {{ marke }}{% endblock %}
+{% block markenlink %}/mein/{{ t.id }}/{{ token }}{% endblock %}
+{% block inhalt %}
+{% set verwaltet = g.modell.value == "verwaltet" %}
+<h1>{{ g.titel }}</h1>
+<p class="unter">Ihre gemeinschaftliche Erzeugungsanlage · {{ status.gea(g.status) }}{% if g.gemeinschafts_id %} · Gemeinschafts-ID <code>{{ g.gemeinschafts_id }}</code>{% endif %}</p>
+
+{% if ergebnisse %}{% for e in ergebnisse %}
+{% if e.fehler %}<div class="fehler"><b>{{ e.datei }}</b>: {{ e.fehler }}</div>
+{% elif e.hinweis %}<div class="warnung"><b>{{ e.datei }}</b>: {{ e.hinweis }}</div>
+{% elif e.ohne_ziel %}<div class="warnung"><b>{{ e.datei }}</b>: Wir prüfen die Datei und melden uns.</div>
+{% else %}<div class="hinweis"><b>{{ e.datei }}</b> übernommen: {{ e.von.strftime("%d.%m.%Y") }} bis {{ e.bis.strftime("%d.%m.%Y") }}, {{ e.zaehlpunkte }} Zählpunkte.{% if e.neu %} Neu dabei: {{ e.neu|join(", ") }}.{% endif %}</div>{% endif %}
+{% endfor %}{% endif %}
+
+{% if aufgaben %}<div class="karte" style="border-color:#f0d9a0;background:var(--gelb-hell)"><h2>Zu erledigen</h2><ul class="aufgaben">
+{% for text, link in aufgaben %}<li><span>{{ text }}</span>{% if link %}<a class="knopf klein-knopf" href="{{ link }}">Jetzt erledigen</a>{% endif %}</li>{% endfor %}</ul></div>{% endif %}
+
+<div class="karte"><h2>Stand</h2>
+<div class="schritte"><div class="ja">Bei uns angemeldet</div>{% for st in schritte %}<div class="{{ 'ja' if loop.index0 <= erreicht }}">{{ {"registriert": "Auf ebUtilities registriert", "eda_angemeldet": "Wohnungen angemeldet", "aktiv": "Daten fließen"}[st.value] }}</div>{% endfor %}</div>
+{% if g.status.value == "vorschlag" %}<p class="klein">Die GEA registrieren Sie selbst über ebUtilities beim Netzbetreiber. Sobald die Wohnungen angemeldet sind, gibt es im EDA-Portal jeden Monat einen Export. Den laden Sie unten hoch.</p>{% endif %}
+</div>
+
+<div class="karte"><h2>Monatlichen EDA-Export hochladen</h2>
+<form method="post" action="/mein/{{ t.id }}/{{ token }}/energiedaten" enctype="multipart/form-data" class="zeile"><div><input type="file" name="dateien" accept=".xlsx,.csv,.txt" multiple required></div><button>Hochladen</button></form>
+<p class="klein">Im EDA-Portal unter den Energiedaten Ihrer Gemeinschaft den Export als Excel herunterladen und hier hochladen. Ein Monat, der schon da ist, wird ersetzt.</p></div>
+
+{% if a %}
+<div class="raster">
+<div class="kpi"><div class="wert">{{ a.erzeugung|zahl }} <small>kWh</small></div><div class="label">{{ "erzeugt" if a.aus_anlage else "erzeugt (aus den Anteilen berechnet)" }}, {{ a.monate|length }} {{ "Monat" if a.monate|length == 1 else "Monate" }}</div></div>
+<div class="kpi"><div class="wert">{{ a.genutzt|zahl }} <small>kWh</small></div><div class="label">im Haus genutzt · {{ (a.genutzt / a.erzeugung * 100 if a.erzeugung else 0)|zahl }} %</div></div>
+<div class="kpi"><div class="wert">{{ (a.genutzt / a.verbrauch * 100 if a.verbrauch else 0)|zahl }} <small>%</small></div><div class="label">des Verbrauchs der Wohnungen gedeckt</div></div>
+{% if a.preis > 0 %}<div class="kpi"><div class="wert">{{ (a.genutzt * a.preis / 100)|zahl(2) }} <small>€</small></div><div class="label">Wert bei {{ a.preis|zahl(2) }} ct/kWh netto (berechnet)</div></div>{% endif %}
+</div>
+<div class="karte"><h2>Je Monat</h2>{{ a.diagramm|safe }}<p class="klein">Werte aus den Messdaten des Netzbetreibers (EDA). Was im Haus nicht gebraucht wird, geht wie bisher ins Netz.</p></div>
+<div class="karte tabelle"><h2>Je Wohnung (kWh)</h2>
+<table><tr><th>Wohnung</th>{% for b in a.beschriftung %}<th class="zahl">{{ b }}</th>{% endfor %}<th class="zahl">Summe</th><th class="zahl">Anteil am Verbrauch</th>{% if a.preis > 0 %}<th class="zahl">Wert</th>{% endif %}</tr>
+{% for z in a.zeilen %}<tr><td>{{ z.t.name }}</td>{% for w in z.monate %}<td class="zahl">{{ w|zahl }}</td>{% endfor %}<td class="zahl"><b>{{ z.summe.eigendeckung|zahl }}</b></td><td class="zahl">{{ z.quote|zahl }} %</td>{% if a.preis > 0 %}<td class="zahl">{{ z.betrag|zahl(2) }} €</td>{% endif %}</tr>{% endfor %}
+</table></div>
+<div class="karte"><h2>Abrechnungsgrundlage</h2>
+<p>Alles für Ihre Abrechnung an die Wohnungen als Excel: je Wohnung Verbrauch, zugeteilte Menge, genutzte Menge und Betrag.</p>
+<form method="get" action="/mein/{{ t.id }}/{{ token }}/grundlage" class="zeile">
+<div><label>Von</label><input type="date" name="von" value="{{ zeitraeume[0][0] if zeitraeume else '' }}" required></div>
+<div><label>Bis</label><input type="date" name="bis" value="{{ zeitraeume[0][1] if zeitraeume else '' }}" required></div>
+<button>Excel herunterladen</button></form>
+{% if verwaltet %}<p class="klein">Die Rechnungen an die Wohnungen erstellt {{ dienstleister.firma }} in Ihrem Namen.</p>{% endif %}</div>
+{% endif %}
+
+{% if rechnungen %}<div class="karte tabelle"><h2>Rechnungen an die Wohnungen</h2>
+<table><tr><th>Nummer</th><th>Wohnung</th><th>Zeitraum</th><th class="zahl">kWh</th><th class="zahl">Betrag</th><th>Status</th></tr>
+{% for r in rechnungen[:24] %}<tr><td><a href="/mein/{{ t.id }}/{{ token }}/rechnung/{{ r.id }}">{{ r.nummer }}</a></td><td>{% for p in partner %}{% if p.id == r.abnehmer_id %}{{ p.name }}{% endif %}{% endfor %}</td><td>{{ r.von.strftime("%d.%m.%Y") }} – {{ r.bis.strftime("%d.%m.%Y") }}</td><td class="zahl">{{ r.kwh|zahl(1) }}</td><td class="zahl">{{ r.brutto|zahl(2) }} €</td><td>{{ status.rechnung(r) }}</td></tr>{% endfor %}
+</table></div>{% endif %}
+
+{% if gebuehren %}<div class="karte tabelle"><h2>Servicegebühr von {{ dienstleister.firma }}</h2>
+<table><tr><th>Nummer</th><th>Zeitraum</th><th class="zahl">kWh</th><th class="zahl">Betrag</th><th>Fällig</th><th>Status</th></tr>
+{% for x in gebuehren %}<tr><td><a href="/mein/{{ t.id }}/{{ token }}/gebuehr/{{ x.id }}">{{ x.nummer }}</a></td><td>{{ x.von.strftime("%d.%m.%Y") }} – {{ x.bis.strftime("%d.%m.%Y") }}</td><td class="zahl">{{ x.kwh|zahl(1) }}</td><td class="zahl">{{ x.brutto|zahl(2) }} €</td><td>{{ x.faellig.strftime("%d.%m.%Y") }}</td><td>{{ status.rechnung(x) }}</td></tr>{% endfor %}
+</table></div>{% endif %}
+
+{% if verwaltet %}<div class="karte"><h2>Konto für Zahlungen</h2>
+<p class="klein">Die Wohnungen überweisen direkt auf dieses Konto. Die IBAN steht mit QR-Code auf jeder Rechnung.</p>
+{% if iban %}<p>Hinterlegt: <code>{{ iban }}</code></p>{% endif %}
+{% if iban_fehler %}<p class="fehler">Diese IBAN stimmt nicht. Bitte noch einmal prüfen.</p>{% endif %}
+<form method="post" action="/mein/{{ t.id }}/{{ token }}/iban" class="zeile"><div><input name="iban" required placeholder="AT.. .... .... .... ...."></div><button>{{ "Ändern" if iban else "Speichern" }}</button></form></div>{% endif %}
+<p class="klein">Fragen? {{ dienstleister.email }}</p>
+{% endblock %}

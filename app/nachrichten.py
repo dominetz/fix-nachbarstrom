@@ -18,7 +18,9 @@ def willkommen(t: Teilnehmer, kundenlink: str) -> Nachricht:
         mitte = ("wir suchen jetzt passende Abnehmer in Ihrer Nähe. Kennen Sie schon jemanden? "
                  "In Ihrem Bereich finden Sie einen Einladungslink zum Weitergeben.")
     else:
-        mitte = "wir suchen jetzt eine passende PV-Anlage in Ihrer Nähe und melden uns mit einem Vorschlag."
+        mitte = ("wir suchen jetzt eine passende PV-Anlage in Ihrer Nähe und melden uns mit einem Vorschlag. "
+                 "Haben Sie einen Nachbarn mit PV-Anlage im Blick? In Ihrem Bereich finden Sie einen "
+                 "Einladungslink für ihn.")
     return Nachricht(teilnehmer_id=t.id, art="willkommen", betreff=f"{MARKE}: Ihre Anmeldung ist da",
                      text=f"Hallo {t.vorname},\n\ndanke für Ihre Anmeldung! {mitte}\n\n"
                           f"Ihr persönlicher Bereich, dort sehen Sie jederzeit den Stand:\n{kundenlink}{GRUSS}")
@@ -61,3 +63,21 @@ def zahlungserinnerung(t: Teilnehmer, gruppe_id: int, nummer: str, brutto: str, 
                           f"{faellig:%d.%m.%Y}) haben wir noch keinen Zahlungseingang gesehen. Vielleicht ist sie "
                           f"untergegangen. Hier können Sie sie ansehen und mit dem QR-Code bezahlen:\n{link}\n\n"
                           f"Haben Sie schon überwiesen? Dann ist diese Mail hinfällig.{GRUSS}")
+
+
+def willkommen_gea(t: Teilnehmer, gruppe_id: int, name: str, kundenlink: str) -> Nachricht:
+    return Nachricht(teilnehmer_id=t.id, gruppe_id=gruppe_id, art="willkommen",
+                     betreff=f"{MARKE}: Ihre GEA „{name}“ ist eingerichtet",
+                     text=f"Hallo {t.vorname or t.firma or ''},\n\nIhre gemeinschaftliche Erzeugungsanlage ist bei uns "
+                          f"eingerichtet. In Ihrem Bereich laden Sie jeden Monat den Export aus dem EDA-Portal hoch "
+                          f"und sehen sofort, wie viel Sonnenstrom jede Wohnung genutzt hat. Dort gibt es auch die "
+                          f"Abrechnungsgrundlage als Excel.\n\nIhr Bereich (Link bitte aufheben):\n{kundenlink}{GRUSS}")
+
+
+def gebuehr(t: Teilnehmer, gruppe_id: int, nummer: str, brutto: str, faellig: date, link: str,
+            titel: str) -> Nachricht:
+    return Nachricht(teilnehmer_id=t.id, gruppe_id=gruppe_id, art="gebuehr",
+                     betreff=f"{MARKE}: Servicegebühr {nummer}",
+                     text=f"Hallo {t.vorname or t.firma or ''},\n\nanbei unsere Rechnung {nummer} über {brutto} € für "
+                          f"die Servicegebühr ({titel}), fällig bis {faellig:%d.%m.%Y}. Sie können sie hier ansehen "
+                          f"und als PDF speichern:\n{link}{GRUSS}")

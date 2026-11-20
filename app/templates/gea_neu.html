@@ -1,0 +1,46 @@
+{% extends "verwaltung_basis.html" %}
+{% block inhalt %}
+<p class="klein"><a href="/verwaltung/gea">← GEA</a></p>
+<h1>Neue GEA anlegen</h1>
+<p class="unter">Am schnellsten mit dem EDA-Export der GEA: Zählpunkte, Gemeinschafts-ID und Zeitraum kommen dann aus der Datei, der Erzeugungszählpunkt wird zur Anlage, alle anderen zu Wohnungen. Namen der Wohnungen trägst du danach nach.</p>
+{% if fehler %}<div class="fehler">{% for f in fehler %}<div>{{ f }}</div>{% endfor %}</div>{% endif %}
+{% if bericht %}<details open><summary class="klein">Aufbau der Datei (ohne Zählpunktnummern und Namen, zum Weitergeben)</summary><pre style="white-space:pre-wrap;font-size:.8rem;background:#fff;padding:10px;border-radius:8px;border:1px solid var(--linie)">{{ bericht }}</pre></details>{% endif %}
+{% if anfrage %}<div class="hinweis">Aus der Anfrage von {{ anfrage.name }} vom {{ anfrage.erstellt.strftime("%d.%m.%Y") }}.</div>{% endif %}
+<form method="post" enctype="multipart/form-data">
+{% if anfrage %}<input type="hidden" name="anfrage_id" value="{{ anfrage.id }}">{% endif %}
+<div class="karte"><h2>EDA-Export</h2>
+{% if upload and erkannt %}<input type="hidden" name="upload" value="{{ upload.token }}">
+<p><b>{{ upload.dateiname }}</b>: {{ erkannt.imp.zaehlpunkte|length }} Zählpunkte, {{ erkannt.imp.von.strftime("%d.%m.%Y") }} – {{ erkannt.imp.bis.strftime("%d.%m.%Y") }}{% if erkannt.anlage %}, Anlage erkannt ({{ maskiert(erkannt.anlage[0]) }}){% else %}, keine Erzeugungsspalte, die Erzeugung wird aus den Anteilen der Wohnungen berechnet{% endif %}.</p>
+{% else %}<input type="file" name="datei" accept=".xlsx,.csv,.txt">
+<p class="klein">Excel oder CSV aus dem EDA-Portal, ein Monat oder mehrere. Ohne Datei wird die GEA leer angelegt (z. B. aus einer Anfrage, bevor sie registriert ist).</p>{% endif %}
+</div>
+<div class="karte"><h2>GEA</h2>
+<div class="zeile">
+<div><label>Name</label><input name="name" required placeholder="z. B. Wohnanlage Beispielgasse 5" value="{{ werte.name or '' }}"></div>
+<div><label>Status</label><select name="status">{% for st in stati %}<option value="{{ st.value }}" {{ "selected" if st.value == werte.status }}>{{ gea_status_text[st] }}</option>{% endfor %}</select></div>
+</div>
+<div class="zeile">
+<div><label>Gemeinschafts-ID (aus ebUtilities)</label><input name="gemeinschafts_id" value="{{ werte.gemeinschafts_id or '' }}"></div>
+<div><label>Zählpunkt der Anlage (wenn nicht im Export)</label><input name="anlage_zp" placeholder="AT00…" value="{{ werte.anlage_zp or '' }}"></div>
+<div><label>Anlage kWp</label><input type="number" step="0.1" name="anlage_kwp" value="{{ werte.anlage_kwp or '' }}"></div>
+</div>
+<div class="zeile">
+<div><label>Abrechnung</label><select name="modell"><option value="selbst" {{ "selected" if werte.modell == "selbst" }}>Betreiber rechnet selbst ab, wir liefern die Zahlen</option><option value="verwaltet" {{ "selected" if werte.modell == "verwaltet" }}>FIX rechnet im Namen des Betreibers ab</option></select></div>
+<div><label>Aufteilung</label><select name="aufteilung"><option value="dynamisch" {{ "selected" if werte.aufteilung == "dynamisch" }}>dynamisch (nach Verbrauch)</option><option value="statisch" {{ "selected" if werte.aufteilung == "statisch" }}>statisch (fester Anteil je Wohnung)</option></select></div>
+</div>
+<div class="zeile">
+<div><label>Preis für die Wohnungen, ct/kWh netto</label><input type="number" step="0.01" name="preis_ct_kwh" value="{{ werte.preis_ct_kwh or 0 }}"></div>
+<div><label>USt-Satz Betreiber</label><select name="ust_satz"><option value="0">0 % (Kleinunternehmer)</option><option value="0.2" {{ "selected" if werte.ust_satz in ("0.2", 0.2) }}>20 %</option></select></div>
+<div><label>Servicegebühr FIX, ct/kWh netto</label><input type="number" step="0.01" name="gebuehr_ct_kwh" value="{{ werte.gebuehr_ct_kwh }}"></div>
+</div>
+<label><input type="checkbox" name="rechnung_monatlich" value="true" {{ "checked" if werte.rechnung_monatlich }}> Monatlich abrechnen (sonst jährlich)</label>
+</div>
+<div class="karte"><h2>Betreiber</h2>
+<div class="zeile"><div><label>Vorname</label><input name="vorname" value="{{ werte.vorname or '' }}"></div><div><label>Nachname</label><input name="nachname" value="{{ werte.nachname or '' }}"></div><div><label>Firma / Eigentümergemeinschaft</label><input name="firma" value="{{ werte.firma or '' }}"></div></div>
+<div class="zeile"><div><label>Straße, Nr.</label><input name="strasse" value="{{ werte.strasse or '' }}"></div><div><label>PLZ</label><input name="plz" value="{{ werte.plz or '' }}"></div><div><label>Ort</label><input name="ort" value="{{ werte.ort or '' }}"></div></div>
+<div class="zeile"><div><label>E-Mail</label><input type="email" name="email" value="{{ werte.email or '' }}"></div><div><label>Telefon</label><input name="telefon" value="{{ werte.telefon or '' }}"></div></div>
+<label>Notiz</label><textarea name="notiz" rows="2">{{ werte.notiz or '' }}</textarea>
+</div>
+<p><button>GEA anlegen</button></p>
+</form>
+{% endblock %}

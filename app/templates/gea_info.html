@@ -1,0 +1,28 @@
+{% extends "basis.html" %}
+{% block inhalt %}
+<p class="klein"><a href="/">← Startseite</a></p>
+<h1>Gemeinschaftliche Erzeugungsanlage (GEA)</h1>
+<p class="unter">Eine PV-Anlage am Haus, Strom für mehrere Wohnungen. Der Strom wird viertelstundengenau auf die Wohnungen aufgeteilt, gemessen vom Netzbetreiber.</p>
+<div class="zwei">
+<div class="karte"><h2>So läuft es</h2><ol style="padding-left:20px;margin:0">
+<li>Sie registrieren die GEA über ebUtilities beim Netzbetreiber und melden die Wohnungen an. Wir sagen Ihnen gerne, was dafür nötig ist.</li>
+<li>Jeden Monat laden Sie den Export aus dem EDA-Portal in Ihrem Bereich bei uns hoch.</li>
+<li>Sie sehen sofort Erzeugung, genutzten Sonnenstrom je Wohnung und bekommen die Abrechnungsgrundlage als Excel.</li>
+<li>Auf Wunsch rechnen wir in Ihrem Namen mit den Wohnungen ab, mit QR-Code zum Bezahlen.</li></ol></div>
+<div class="karte"><h2>Kosten</h2><p>Wir verrechnen eine kleine Servicegebühr je Kilowattstunde, die im Haus genutzt wird. Ohne genutzten Strom fällt nichts an. Den genauen Betrag nennen wir Ihnen mit dem Angebot.</p></div>
+</div>
+<div class="karte"><h2>Anfrage</h2>
+{% if fehler %}<div class="fehler">{{ fehler }}</div>{% endif %}
+<form method="post" action="/gea">
+<div class="raster"><div><label>Vorname</label><input name="vorname" required value="{{ werte.vorname }}"></div><div><label>Nachname</label><input name="nachname" required value="{{ werte.nachname }}"></div><div><label>Firma / Hausverwaltung (optional)</label><input name="firma" value="{{ werte.firma }}"></div></div>
+<div class="raster"><div><label>E-Mail</label><input type="email" name="email" required value="{{ werte.email }}"></div><div><label>Telefon</label><input name="telefon" value="{{ werte.telefon }}"></div></div>
+<div class="raster"><div><label>Adresse des Hauses</label><input name="strasse" required value="{{ werte.strasse }}"></div><div><label>PLZ</label><input name="plz" required value="{{ werte.plz }}"></div><div><label>Ort</label><input name="ort" required value="{{ werte.ort }}"></div></div>
+<div class="raster"><div><label>Anzahl Wohnungen</label><input type="number" name="wohnungen" value="{{ werte.wohnungen or '' }}"></div><div><label>PV-Anlage kWp (falls bekannt)</label><input type="number" step="0.1" name="anlage_kwp" value="{{ werte.anlage_kwp or '' }}"></div><div><label>Zählpunktnummer Einspeisung der Anlage (falls bekannt)</label><input name="anlage_zp" placeholder="AT00…" value="{{ werte.anlage_zp or '' }}"></div>
+<div><label>Schon über ebUtilities registriert?</label><select name="registriert"><option value="nein">Nein</option><option value="ja" {{ "selected" if werte.registriert == "ja" }}>Ja</option><option value="weiss_nicht" {{ "selected" if werte.registriert == "weiss_nicht" }}>Weiß nicht</option></select></div></div>
+<div class="raster"><div><label>Gemeinschafts-ID (falls schon vorhanden)</label><input name="gemeinschafts_id" value="{{ werte.gemeinschafts_id }}"></div>
+<div><label>Gewünscht</label><select name="modell"><option value="selbst">Zahlen und Abrechnungsgrundlage, wir rechnen selbst ab</option><option value="verwaltet" {{ "selected" if werte.modell == "verwaltet" }}>{{ dienstleister.firma }} übernimmt die Abrechnung</option></select></div></div>
+<label>Nachricht (optional)</label><textarea name="nachricht" rows="3">{{ werte.nachricht }}</textarea>
+<label><input type="checkbox" name="einwilligung" value="true"> Ich bin einverstanden, dass {{ dienstleister.firma }} meine Angaben nutzt, um die Anfrage zu beantworten.</label>
+<p><button>Anfrage senden</button></p>
+</form></div>
+{% endblock %}

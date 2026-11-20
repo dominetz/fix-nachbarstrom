@@ -1,0 +1,18 @@
+{% extends "verwaltung_basis.html" %}
+{% block inhalt %}
+<h1>Anfragen</h1>
+<p class="unter">Was über die Startseite hereinkommt: GEA-Anfragen und Fragen. Anmeldungen für P2P landen direkt unter <a href="/verwaltung/teilnehmer">Teilnehmer</a>.</p>
+{% for a in liste %}
+<div class="karte"{% if a.status == "neu" %} style="border-color:var(--gruen)"{% endif %}>
+<div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap"><div>
+<span class="badge {{ {'neu': 'warn', 'in_bearbeitung': 'blau', 'erledigt': 'ok'}[a.status] }}">{{ {"neu": "neu", "in_bearbeitung": "in Bearbeitung", "erledigt": "erledigt"}[a.status] }}</span>
+<b>{{ {"gea": "GEA-Anfrage", "p2p": "Frage zu P2P", "frage": "Frage"}[a.art] }}</b> von {{ a.name }} · {{ a.erstellt.strftime("%d.%m.%Y %H:%M") }}</div>
+<form method="post" action="/verwaltung/anfrage/{{ a.id }}" style="display:flex;gap:6px"><select name="status" style="width:auto">{% for st, txt in [("neu", "neu"), ("in_bearbeitung", "in Bearbeitung"), ("erledigt", "erledigt")] %}<option value="{{ st }}" {{ "selected" if st == a.status }}>{{ txt }}</option>{% endfor %}</select><button class="zweit klein-knopf">Setzen</button></form></div>
+<p class="klein">{{ a.email }}{% if a.telefon %} · {{ a.telefon }}{% endif %}{% if a.strasse or a.ort %} · {{ a.strasse or "" }} {{ a.plz or "" }} {{ a.ort or "" }}{% endif %}</p>
+{% if a.art == "gea" %}<p>{{ a.wohnungen }} Wohnungen{% if a.anlage_kwp %} · {{ a.anlage_kwp|zahl(1) }} kWp{% endif %}{% if a.anlage_zp %} · Einspeisung {{ maskiert(a.anlage_zp) }}{% endif %} · registriert: {{ {"ja": "ja", "nein": "nein", "weiss_nicht": "weiß nicht"}[a.registriert] }}{% if a.gemeinschafts_id %} · ID {{ a.gemeinschafts_id }}{% endif %} · gewünscht: {{ "FIX rechnet ab" if a.modell == "verwaltet" else "Zahlen, selbst abrechnen" }}</p>{% endif %}
+{% if a.nachricht %}<p style="white-space:pre-wrap">{{ a.nachricht }}</p>{% endif %}
+<p><a class="knopf zweit klein-knopf" href="{{ mailto[a.id] }}">Antwort im Mailprogramm</a>
+{% if a.art == "gea" %}{% if a.gruppe_id %} <a class="knopf klein-knopf" href="/verwaltung/gea/{{ a.gruppe_id }}">Zur GEA {{ gruppen[a.gruppe_id].titel }}</a>{% else %} <a class="knopf klein-knopf" href="/verwaltung/gea/neu?anfrage={{ a.id }}">GEA anlegen</a>{% endif %}{% endif %}</p>
+</div>
+{% else %}<p>Noch keine Anfragen.</p>{% endfor %}
+{% endblock %}
