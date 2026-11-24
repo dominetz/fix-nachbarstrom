@@ -2,28 +2,27 @@
 {% import "_status.html" as status %}
 {% block inhalt %}
 <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap"><h1>Peer-to-Peer</h1><a class="knopf" href="/verwaltung/matching">Neue Gruppe aus dem Matching</a></div>
-<p class="unter">Ein Erzeuger teilt seinen Überschuss mit Abnehmern in der Nähe (§ 68 ElWG). {% if einmalig_modus %}Wir vermitteln, setzen den Vertrag auf und melden an. Das verrechnen wir einmal an den Erzeuger, danach rechnen die Nachbarn selbst ab.{% else %}Vertrag, Anmeldung und Abrechnung laufen über die Plattform.{% endif %}</p>
+<p class="unter">Ein Erzeuger teilt seinen Überschuss mit Abnehmern in der Nähe (§ 68 ElWG). Wir vermitteln, setzen den Vertrag auf und melden an. Will der Erzeuger Auslesung, Monitoring und Rechnungen über uns, rechnen wir ab und verrechnen je kWh, sonst nur die Einrichtung. Schenkungen sind kostenlos.</p>
 
 <div class="raster">
 <div class="kpi"><div class="wert">{{ k.aktiv }} <small>aktiv</small>{% if k.in_arbeit %} · {{ k.in_arbeit }} <small>in Vorbereitung</small>{% endif %}</div><div class="label">P2P-Gruppen</div></div>
 <div class="kpi"><div class="wert">{{ k.erzeuger }} <small>Erzeuger</small> · {{ k.abnehmer }} <small>Abnehmer</small></div><div class="label">angemeldet{% if k.frei %} · <a href="#frei">{{ k.frei }} noch ohne Gruppe</a>{% endif %}</div></div>
 <div class="kpi"><div class="wert">{{ k.geteilt|zahl }} <small>kWh</small></div><div class="label">geteilt in aktiven Gruppen, letzte 12 Monate mit Daten</div></div>
-{% if einmalig_modus %}<a class="kpi" href="/verwaltung/rechnungen#gebuehren"><div class="wert">{{ k.einrichtung_offen|zahl(2) }} <small>€</small></div><div class="label">Einrichtung offen bei Erzeugern{% if k.einrichtung_fehlt %} · <span class="badge warn">{{ k.einrichtung_fehlt }} aktiv, noch nicht verrechnet</span>{% endif %}</div></a>
-{% else %}<a class="kpi" href="/verwaltung/rechnungen"><div class="wert">{{ k.offen|zahl(2) }} <small>€</small></div><div class="label">offen bei Abnehmern{% if k.ueberfaellig %} · <span class="badge rot">{{ k.ueberfaellig }} überfällig</span>{% endif %}</div></a>{% endif %}
+<a class="kpi" href="/verwaltung/rechnungen"><div class="wert">{{ k.offen|zahl(2) }} <small>€</small></div><div class="label">offen bei Abnehmern{% if k.ueberfaellig %} · <span class="badge rot">{{ k.ueberfaellig }} überfällig</span>{% endif %}{% if k.einrichtung_offen %} · {{ k.einrichtung_offen|zahl(2) }} € Einrichtung offen{% endif %}{% if k.einrichtung_fehlt %} · <span class="badge warn">{{ k.einrichtung_fehlt }} Einrichtung noch nicht verrechnet</span>{% endif %}</div></a>
 </div>
 
 <div class="karte tabelle"><h2>Gruppen</h2>
-<table><tr><th>Gruppe</th><th>Abnehmer</th><th class="zahl">Preis</th><th class="zahl">Geteilt (12 Mon.)</th><th class="zahl">Offen</th><th>{{ "Einrichtung" if einmalig_modus else "Abrechnung" }}</th></tr>
+<table><tr><th>Gruppe</th><th>Abnehmer</th><th class="zahl">Preis</th><th class="zahl">Geteilt (12 Mon.)</th><th class="zahl">Offen</th><th>Abrechnung</th></tr>
 {% for z in zeilen %}{% set g, e, a = z.g, z.e, z.a %}<tr>
 <td style="min-width:260px"><a href="/verwaltung/gruppe/{{ g.id }}"><b>{{ g.id }} · {{ e.name }}</b></a> {{ status.gruppe(g.status) }}<br><span class="klein">{{ e.ort }} · {{ e.anlage_kwp|zahl(1) }} kWp · Einspeisung {{ maskiert(e.zaehlpunkt) }}</span></td>
 <td class="klein" style="min-width:150px">{% for t in z.abnehmer %}{{ t.name }}{% if not loop.last %}, {% endif %}{% else %}noch keine{% endfor %}</td>
-<td class="zahl">{% if g.preis_ct_kwh > 0 %}{{ g.preis_ct_kwh|zahl(2) }} ct{% else %}Schenkung{% endif %}<br><span class="klein">{% if einmalig(g) %}{{ "keine Rechnung" if g.preis_ct_kwh <= 0 else "Erzeuger rechnet ab" }}{% else %}{{ "monatlich" if g.rechnung_monatlich else "jährlich" }}{% endif %}</span></td>
+<td class="zahl">{% if g.preis_ct_kwh > 0 %}{{ g.preis_ct_kwh|zahl(2) }} ct{% else %}Schenkung{% endif %}<br><span class="klein">{% if g.preis_ct_kwh <= 0 %}kostenlos{% elif einmalig(g) %}Erzeuger rechnet ab{% else %}über uns, {{ "monatlich" if g.rechnung_monatlich else "jährlich" }}{% endif %}</span></td>
 <td class="zahl">{% if a %}{{ a.geteilt|zahl }} kWh<br><span class="klein">{{ (a.geteilt / a.einspeisung * 100 if a.einspeisung else 0)|zahl }} % der Einspeisung</span>{% else %}–{% endif %}</td>
 {% set x = z.einrichtung %}
 {% if einmalig(g) %}<td class="zahl">{% if x and not x.bezahlt_am %}{{ x.brutto|zahl(2) }} €{% else %}–{% endif %}</td>
-<td style="min-width:150px">{% if x %}{{ x.nummer }} {{ status.rechnung(x) }}{% elif g.status.value == "aktiv" %}<span class="badge warn">noch nicht verrechnet</span>{% else %}<span class="klein">nach der Unterschrift</span>{% endif %}</td></tr>
+<td style="min-width:150px">Nachbarn selbst<br>{% if g.preis_ct_kwh <= 0 %}<span class="klein">Schenkung, kostenlos</span>{% elif x %}<span class="klein">Einrichtung {{ x.nummer }}</span> {{ status.rechnung(x) }}{% elif g.status.value == "aktiv" %}<span class="badge warn">Einrichtung noch nicht verrechnet</span>{% else %}<span class="klein">Einrichtung nach der Unterschrift</span>{% endif %}</td></tr>
 {% else %}<td class="zahl">{% if z.offen %}{{ z.offen|zahl(2) }} €{% if z.ueberfaellig %}<br><span class="badge rot">{{ z.ueberfaellig }} überfällig</span>{% endif %}{% else %}–{% endif %}</td>
-<td style="min-width:150px">{% if a %}Daten bis {{ a.bis.strftime("%d.%m.%Y") }}{% else %}noch keine Daten{% endif %}{% if z.naechste %}<br><span class="klein">nächste: {{ z.naechste[0].strftime("%d.%m.%Y") }}–{{ z.naechste[1].strftime("%d.%m.%Y") }}</span>{% endif %}</td></tr>{% endif %}
+<td style="min-width:150px">{% if a %}Daten bis {{ a.bis.strftime("%d.%m.%Y") }}{% else %}noch keine Daten{% endif %}{% if g.preis_ct_kwh <= 0 %}<br><span class="klein">Schenkung, kostenlos</span>{% elif z.naechste %}<br><span class="klein">nächste: {{ z.naechste[0].strftime("%d.%m.%Y") }}–{{ z.naechste[1].strftime("%d.%m.%Y") }}</span>{% endif %}{% if x %}<br><span class="klein">Einrichtung</span> {{ status.rechnung(x) }}{% endif %}</td></tr>{% endif %}
 {% else %}<tr><td colspan="6">Noch keine P2P-Gruppe. Vorschläge gibt es unter <a href="/verwaltung/matching">Matching</a>.</td></tr>{% endfor %}
 </table></div>
 

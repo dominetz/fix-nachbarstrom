@@ -36,11 +36,12 @@ RECHTSTEXTE_GEPRUEFT = os.environ.get("NACHBARSTROM_RECHTSTEXTE_GEPRUEFT", "") =
 DIENSTLEISTER_UST = float(os.environ.get("NACHBARSTROM_FIRMA_UST", "0.20"))
 # Vorschlag für neue Gruppen und GEAs, in jeder Gruppe einzeln änderbar
 GEBUEHR_STANDARD_CT_KWH = float(os.environ.get("NACHBARSTROM_GEBUEHR_CT_KWH", "1.0"))
-# P2P: "einmalig" = FIX vermittelt, setzt den Vertrag auf, meldet an und verrechnet das einmal an den
-# Erzeuger. Danach rechnen Erzeuger und Abnehmer selbst miteinander ab, eine Schenkung gar nicht.
-# "laufend" = FIX rechnet jede Periode im Namen des Erzeugers ab und verrechnet die Gebühr je kWh.
-P2P_ABRECHNUNG = ("laufend" if os.environ.get("NACHBARSTROM_P2P_ABRECHNUNG", "").strip().lower() == "laufend"
-                  else "einmalig")
+# P2P, je Gruppe wählbar, hier der Vorschlag für neue Gruppen:
+# "verwaltet" = Auslesung, Monitoring und Rechnungen über FIX: einmal die Einrichtungsgebühr und
+#               laufend die Servicegebühr je geteilter kWh.
+# "selbst"    = FIX verrechnet nur die Einrichtung, danach rechnen Erzeuger und Abnehmer selbst ab.
+# Bei einer Schenkung (Preis 0) verrechnet FIX gar nichts.
+P2P_MODELL = "selbst" if os.environ.get("NACHBARSTROM_P2P_MODELL", "").strip().lower() == "selbst" else "verwaltet"
 # Einmalige Einrichtungsgebühr je P2P-Vertrag in Euro netto, Vorschlag für neue Gruppen.
 # 0 = noch nicht festgelegt, dann bleibt der Knopf für die Rechnung gesperrt.
 EINRICHTUNG_EUR = float(os.environ.get("NACHBARSTROM_EINRICHTUNG_EUR", "0"))

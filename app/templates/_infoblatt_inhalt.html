@@ -8,7 +8,7 @@
 <tr><th>Herkunft</th><td>100 % Sonnenstrom aus Österreich</td></tr>
 <tr><th>Preis</th><td>{% if g.preis_ct_kwh > 0 %}{{ g.preis_ct_kwh|zahl(2) }} ct/kWh netto{% if g.ust_satz %} zuzüglich {{ (g.ust_satz*100)|zahl }} % USt{% endif %}{% else %}unentgeltlich{% endif %}. Keine Grundgebühr, keine Mindestmenge.{% if g.preis_neu_ab %} Angekündigt: {{ g.preis_neu_ct_kwh|zahl(2) }} ct/kWh ab {{ g.preis_neu_ab.strftime("%d.%m.%Y") }}.{% endif %}</td></tr>
 <tr><th>Netzentgelte</th><td>Verrechnet weiter der Netzbetreiber. Im Nahebereich gibt es ab 1.1.2027 einen Rabatt auf das Netznutzungsentgelt (Zone {{ g.zonelevel }}).</td></tr>
-{% if selbst and g.preis_ct_kwh <= 0 %}<tr><th>Rechnung</th><td>Keine, der Strom ist geschenkt.</td></tr>
+{% if g.preis_ct_kwh <= 0 %}<tr><th>Rechnung</th><td>Keine, der Strom ist geschenkt.</td></tr>
 {% elif selbst %}<tr><th>Rechnung</th><td>Stellt der Erzeuger selbst, {% if g.rechnung_monatlich %}monatlich{% else %}jährlich{% endif %}, kostenlos, auf Wunsch monatlich. Grundlage sind die Messdaten des Netzbetreibers.</td></tr>
 <tr><th>Zahlung</th><td>Überweisung innerhalb von {{ 14 }} Tagen auf das Konto des Erzeugers.</td></tr>
 {% else %}<tr><th>Rechnung</th><td>{% if g.rechnung_monatlich %}Monatlich{% else %}Jährlich{% endif %}, kostenlos, auf Wunsch monatlich. Grundlage sind die Messdaten des Netzbetreibers.</td></tr>

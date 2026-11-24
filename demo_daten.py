@@ -109,6 +109,8 @@ def anlegen(neu: bool = False) -> None:
             g = Gruppe(erwartete_kwh_jahr=round(sum(menge.values())), erzeuger_id=leute[e].id, status=status, zonelevel=zone, preis_ct_kwh=preis,
                        rechnung_monatlich=monatlich, marktpartner_id=f"PP90000{nr}", gebuehr_ct_kwh=1.0,
                        einrichtung_eur=config.EINRICHTUNG_EUR or TEST_EINRICHTUNG_EUR,
+                       # Gruppe 3 rechnet selbst ab, wir verrechnen dort nur die Einrichtung
+                       modell=Modell.SELBST if nr == 3 else Modell.VERWALTET,
                        gemeinschafts_id=f"AT{NB}0000000000000000000TEST{nr:04d}",
                        aktiv_seit=JAHR_VON if status == GruppenStatus.AKTIV else None,
                        notiz="Testgruppe, erfundene Daten")
@@ -182,12 +184,11 @@ def anlegen(neu: bool = False) -> None:
                                                                     g.gemeinschafts_id))
         s.commit()
 
-        # P2P „einmalig“: Gruppe 1 hat die Einrichtung bezahlt, bei Gruppe 2 ist sie noch zu verrechnen.
-        # P2P „laufend“: Gruppe 1 rechnet monatlich ab, Oktober bis August abgerechnet, bis Juli bezahlt
+        # Gruppe 1 hat die Einrichtung bezahlt, bei Gruppe 2 ist sie noch zu verrechnen. Gruppe 1 rechnet
+        # über uns monatlich ab: Oktober bis August abgerechnet, bis Juli bezahlt
         g, e, ab = gruppen[0]
-        if gebuehren.einmalig(g):
-            x = gebuehren.einrichtung_anlegen(s, g, datum=JAHR_VON)
-            x.bezahlt_am = JAHR_VON + timedelta(days=9)
+        x = gebuehren.einrichtung_anlegen(s, g, datum=JAHR_VON)
+        x.bezahlt_am = JAHR_VON + timedelta(days=9)
         for erster, letzter in ([] if gebuehren.einmalig(g) else energiedaten.monate(JAHR_VON, date(2026, 8, 31))):
             werte = auswertung.summen(s, [a.zaehlpunkt for a in ab], erster, letzter, g.id)
             for a in ab:
