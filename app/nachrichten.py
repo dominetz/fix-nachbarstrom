@@ -81,3 +81,12 @@ def gebuehr(t: Teilnehmer, gruppe_id: int, nummer: str, brutto: str, faellig: da
                      text=f"Hallo {t.vorname or t.firma or ''},\n\nanbei unsere Rechnung {nummer} über {brutto} € für "
                           f"die Servicegebühr ({titel}), fällig bis {faellig:%d.%m.%Y}. Sie können sie hier ansehen "
                           f"und als PDF speichern:\n{link}{GRUSS}")
+
+
+def einrichtung(t: Teilnehmer, gruppe_id: int, nummer: str, brutto: str, faellig: date, link: str) -> Nachricht:
+    return Nachricht(teilnehmer_id=t.id, gruppe_id=gruppe_id, art="gebuehr",
+                     betreff=f"{MARKE}: Rechnung {nummer} für die Einrichtung",
+                     text=f"Hallo {t.vorname or t.firma or ''},\n\nanbei unsere einmalige Rechnung {nummer} über "
+                          f"{brutto} € für die Einrichtung Ihres Nachbarstrom-Vertrags (Vermittlung, Vertrag und "
+                          f"Anmeldung beim Netzbetreiber), fällig bis {faellig:%d.%m.%Y}. Sie können sie hier ansehen "
+                          f"und als PDF speichern:\n{link}{GRUSS}")

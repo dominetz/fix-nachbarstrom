@@ -4,6 +4,7 @@
 {% block markenlink %}/mein/{{ t.id }}/{{ token }}{% endblock %}
 {% block inhalt %}
 {% set erz = t.rolle.value == "erzeuger" %}
+{% set selbst = einmalig(g) %}{# P2P „einmalig“: die Nachbarn rechnen selbst ab #}
 <h1>Hallo{% if t.vorname %} {{ t.vorname }}{% endif %}!</h1>
 <p class="unter">{% if gea %}Ihre Wohnung in der GEA „{{ g.titel }}“{% else %}Ihr Bereich als {{ "Erzeuger" if erz else "Abnehmer" }}{% endif %} · {% if gea %}Zählpunkt{% elif erz %}Einspeisung{% else %}Bezug{% endif %} <code>{{ maskiert(t.zaehlpunkt) }}</code>{% if not gea and erz and t.zaehlpunkt_bezug %} · Bezug <code>{{ maskiert(t.zaehlpunkt_bezug) }}</code>{% endif %}{% if not gea and not erz and t.zaehlpunkt_einspeisung %} · Einspeisung <code>{{ maskiert(t.zaehlpunkt_einspeisung) }}</code>{% endif %}</p>
 
@@ -23,7 +24,8 @@
 {% if erz %}
 <div class="kpi"><div class="wert">{{ (a.einspeisung - a.rest)|zahl }} <small>kWh</small></div><div class="label">an Ihre Abnehmer geteilt (12 Monate)</div></div>
 <div class="kpi"><div class="wert">{{ ((a.einspeisung - a.rest) / a.einspeisung * 100 if a.einspeisung else 0)|zahl }} <small>%</small></div><div class="label">Ihres Überschusses ging an Nachbarn</div></div>
-<div class="kpi"><div class="wert">{{ (rechnungen|sum(attribute="brutto"))|zahl(2) }} <small>€</small></div><div class="label">abgerechnet (alle Rechnungen)</div></div>
+{% if selbst %}<div class="kpi"><div class="wert">{{ (a.geteilt / a.verbrauch * 100 if a.verbrauch else 0)|zahl }} <small>%</small></div><div class="label">des Verbrauchs Ihrer Abnehmer gedeckt</div></div>
+{% else %}<div class="kpi"><div class="wert">{{ (rechnungen|sum(attribute="brutto"))|zahl(2) }} <small>€</small></div><div class="label">abgerechnet (alle Rechnungen)</div></div>{% endif %}
 {% else %}
 <div class="kpi"><div class="wert">{{ a.geteilt|zahl }} <small>kWh</small></div><div class="label">Sonnenstrom {{ "vom eigenen Dach" if gea else "vom Nachbarn" }} (12 Monate)</div></div>
 <div class="kpi"><div class="wert">{{ (a.geteilt / a.verbrauch * 100 if a.verbrauch else 0)|zahl }} <small>%</small></div><div class="label">Ihres Verbrauchs</div></div>
@@ -41,20 +43,29 @@
 <p>Preis: {% if preis_heute > 0 %}<b>{{ preis_heute|zahl(2) }} ct/kWh</b> netto{% else %}unentgeltlich{% endif %}{% if g.preis_neu_ab %}<br><span class="klein">ab {{ g.preis_neu_ab.strftime("%d.%m.%Y") }}: {{ g.preis_neu_ct_kwh|zahl(2) }} ct/kWh</span>{% endif %}</p>
 {% if not gea %}<p><a class="knopf zweit" href="/mein/{{ t.id }}/{{ token }}/infoblatt">Informationsblatt</a></p>{% endif %}</div>
 
+{% if selbst %}<div class="karte"><h2>Abrechnung</h2>
+{% if preis_heute <= 0 %}<p>Der Strom ist geschenkt. Es gibt keine Rechnung.</p>
+{% elif erz %}<p>Sie stellen Ihren Abnehmern die Rechnung selbst, {{ "monatlich" if g.rechnung_monatlich else "jährlich" }} und kostenlos, auf Grundlage der Messdaten des Netzbetreibers. Ihre Abnehmer zahlen direkt an Sie.</p>
+{% else %}<p>Ihre Rechnung kommt direkt vom Erzeuger, {{ "monatlich" if g.rechnung_monatlich else "jährlich" }} und kostenlos. Sie zahlen direkt an den Erzeuger.</p>{% endif %}
+{% if erz and gebuehren %}<h3 style="font-size:1rem">Unsere Rechnung an Sie</h3><table><tr><th>Nummer</th><th class="zahl">Betrag</th><th>Fällig</th><th>Status</th></tr>
+{% for x in gebuehren %}<tr><td style="white-space:nowrap"><a href="/mein/{{ t.id }}/{{ token }}/gebuehr/{{ x.id }}">{{ x.nummer }}</a></td><td class="zahl">{{ x.brutto|zahl(2) }} €</td><td>{{ x.faellig.strftime("%d.%m.%Y") }}</td><td>{{ status.rechnung(x) }}</td></tr>{% endfor %}</table>{% endif %}
+</div>
+{% else %}
 <div class="karte"><h2>{{ "Einnahmen je Jahr" if erz else "Kosten je Jahr" }}</h2>
 <table><tr><th>Jahr</th><th class="zahl">kWh</th><th class="zahl">Betrag</th><th class="zahl">{{ "eingegangen" if erz else "bezahlt" }}</th></tr>
 {% for jahr, w in jahre %}<tr><td>{{ jahr }}</td><td class="zahl">{{ w.kwh|zahl }}</td><td class="zahl">{{ w.brutto|zahl(2) }} €</td><td class="zahl">{{ w.bezahlt|zahl(2) }} €</td></tr>
 {% else %}<tr><td colspan="4" class="klein">Noch keine Rechnungen.</td></tr>{% endfor %}</table></div>
+{% endif %}
 </div>
 
-<div class="karte tabelle"><h2>Rechnungen</h2>
+{% if not selbst or rechnungen %}<div class="karte tabelle"><h2>Rechnungen</h2>
 <table><tr><th>Nummer</th>{% if erz %}<th>Abnehmer</th>{% endif %}<th>Zeitraum</th><th class="zahl">kWh</th><th class="zahl">Betrag</th><th>Fällig</th><th>Status</th></tr>
 {% for r in rechnungen %}{% if loop.index == 10 %}</table><details><summary class="klein" style="margin:8px 0">Ältere Rechnungen ({{ rechnungen|length - 9 }})</summary><table>{% endif %}<tr><td><a href="/mein/{{ t.id }}/{{ token }}/rechnung/{{ r.id }}">{{ r.nummer }}</a></td>{% if erz %}<td>{% for p in partner %}{% if p.id == r.abnehmer_id %}{{ p.vorname }}{% endif %}{% endfor %}</td>{% endif %}<td>{{ r.von.strftime("%d.%m.%Y") }} – {{ r.bis.strftime("%d.%m.%Y") }}</td><td class="zahl">{{ r.kwh|zahl(1) }}</td><td class="zahl">{{ r.brutto|zahl(2) }} €</td><td>{{ r.faellig.strftime("%d.%m.%Y") }}</td><td>{{ status.rechnung(r) }}</td></tr>
 {% else %}<tr><td colspan="7">Noch keine Rechnungen.</td></tr>{% endfor %}
-</table>{% if rechnungen|length >= 10 %}</details>{% endif %}</div>
+</table>{% if rechnungen|length >= 10 %}</details>{% endif %}</div>{% endif %}
 {% endif %}
 
-{% if erz %}
+{% if erz and not selbst %}
 <div class="zwei">
 <div class="karte"><h2>Konto für Zahlungen</h2>
 <p class="klein">Ihre Abnehmer überweisen direkt auf dieses Konto. Die IBAN steht mit QR-Code auf jeder Rechnung.</p>

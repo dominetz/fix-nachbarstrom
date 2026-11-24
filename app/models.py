@@ -143,6 +143,7 @@ class Gruppe(SQLModel, table=True):
     modell: Modell = Modell.VERWALTET
     aufteilung: str = "dynamisch"  # GEA: "dynamisch" oder "statisch" (fester Anteil je Wohnung)
     gebuehr_ct_kwh: float = 0.0  # Servicegebühr von FIX je geteilter kWh, netto
+    einrichtung_eur: float = 0.0  # P2P: einmalige Einrichtungsgebühr von FIX an den Erzeuger, netto
     erstellt: datetime = Field(default_factory=jetzt)
     notiz: Optional[str] = None
 
@@ -289,9 +290,11 @@ class Anfrage(SQLModel, table=True):
 
 
 class Gebuehr(SQLModel, table=True):
-    """Rechnung der Servicegebühr von FIX an den Erzeuger bzw. GEA-Betreiber."""
+    """Rechnung von FIX an den Erzeuger bzw. GEA-Betreiber: die Servicegebühr je geteilter kWh
+    oder die einmalige Einrichtung eines P2P-Vertrags."""
     id: Optional[int] = Field(default=None, primary_key=True)
     nummer: str = Field(index=True, unique=True)
+    art: str = "kwh"  # "kwh" je geteilter kWh, "einrichtung" einmalig für das Aufsetzen eines P2P-Vertrags
     gruppe_id: int = Field(foreign_key="gruppe.id")
     empfaenger_id: int = Field(foreign_key="teilnehmer.id")
     von: date

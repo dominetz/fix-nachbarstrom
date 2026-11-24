@@ -2,11 +2,13 @@
 
 Zwei Modelle auf einer Plattform:
 * P2P: Nachbarn teilen Strom (§ 68 ElWG). FIX findet Partner (Wunschnachbar über
-  Einladungslink oder Matching), erstellt Vertrag und Vollmacht, meldet an und rechnet ab.
+  Einladungslink oder Matching), erstellt Vertrag und Vollmacht und meldet an. Im Modell
+  „einmalig“ (Standard) verrechnet FIX das einmal und die Nachbarn rechnen danach selbst ab,
+  im Modell „laufend“ rechnet FIX im Namen des Erzeugers ab (config.P2P_ABRECHNUNG).
 * GEA: gemeinschaftliche Erzeugungsanlage im Mehrparteienhaus. Der Betreiber
   registriert selbst über ebUtilities, lädt monatlich den EDA-Export hoch und
   bekommt die Zahlen je Wohnung. Auf Wunsch rechnet FIX ab.
-Für beide Modelle kann eine Servicegebühr je geteilter kWh vereinbart werden.
+Für GEAs (und P2P „laufend“) kann eine Servicegebühr je geteilter kWh vereinbart werden.
 
 Öffentlich: Startseite, Anfragen, Anmeldung, Unterschrift, persönlicher Bereich.
 Verwaltung (Passwort): alles andere.
@@ -105,7 +107,8 @@ def zp_anzeige(nummer: str) -> str:
 
 vorlagen.env.globals.update(marke=config.MARKE, dienstleister=config.DIENSTLEISTER, status_text=STATUS_TEXT,
                             gea_status_text=GEA_STATUS_TEXT, maskiert=zp_anzeige, rechnung_status=rechnung_status,
-                            monatsname=diagramme.monatsname, feld_text=eda_import.FELD_TEXT)
+                            monatsname=diagramme.monatsname, feld_text=eda_import.FELD_TEXT,
+                            einmalig=gebuehren.einmalig, dienstleister_ust=config.DIENSTLEISTER_UST)
 vorlagen.env.filters["zahl"] = lambda x, s=0: f"{x:,.{s}f}".replace(",", "X").replace(".", ",").replace("X", ".")
 sicherheit = HTTPBasic(auto_error=True)
 
@@ -450,12 +453,19 @@ def uebersicht(request: Request, s: Session = Depends(sitzung), _=Depends(verwal
     for g in aktiv:
         if g.art == Art.GEA and g.modell == Modell.SELBST and g.gebuehr_ct_kwh <= 0:
             continue  # der Betreiber rechnet selbst ab, für FIX ist nichts zu tun
+        if gebuehren.einmalig(g):
+            continue  # P2P: nur die Einrichtung wird verrechnet, siehe unten
         von, bis = abrechnungs_vorschlag(s, g)
         letzter = auswertung.letzter_tag(s, list(importe.zaehlpunkte(s, g)), g.id)
         was = "Servicegebühr" if g.art == Art.GEA and g.modell == Modell.SELBST else "Abrechnung"
         faellig.append((g, s.get(Teilnehmer, g.erzeuger_id), von, bis, bool(letzter and letzter >= bis), was))
+    # P2P „einmalig“: aktive Gruppen, deren Einrichtung noch nicht verrechnet ist
+    einrichtungen = {x.gruppe_id: x for x in alle_gebuehren if x.art == "einrichtung"}
+    einrichtung_offen = [(g, s.get(Teilnehmer, g.erzeuger_id)) for g in aktiv
+                         if gebuehren.einmalig(g) and g.id not in einrichtungen]
     testmodus = any(t.email.endswith("@example.com") for t in teilnehmer)
     return _seite(request, "verwaltung.html", zeilen=[(g, s.get(Teilnehmer, g.erzeuger_id)) for g in p2p],
+                  einrichtungen=einrichtungen, einrichtung_offen=einrichtung_offen,
                   gea_zeilen=[(g, s.get(Teilnehmer, g.erzeuger_id), len(importe.mitglieder(s, g))) for g in geas],
                   teilnehmer=teilnehmer, k=kennzahlen, anzahl_erinnerungen=len(erinnerungen), gesamt=gesamt,
                   faellig=faellig, testmodus=testmodus,
@@ -503,8 +513,10 @@ def p2p_liste(request: Request, s: Session = Depends(sitzung), _=Depends(verwalt
         abnehmer = [t for _, t in importe.mitglieder(s, g)]
         a = _auswertung(s, e, abnehmer, g.id)
         offen = [r for r in s.exec(select(Rechnung).where(Rechnung.gruppe_id == g.id)).all() if not r.bezahlt_am]
-        naechste = abrechnungs_vorschlag(s, g) if g.status == GruppenStatus.AKTIV else None
+        naechste = abrechnungs_vorschlag(s, g) if g.status == GruppenStatus.AKTIV and not gebuehren.einmalig(g) \
+            else None
         zeilen.append({"g": g, "e": e, "abnehmer": abnehmer, "a": a, "naechste": naechste,
+                       "einrichtung": gebuehren.einrichtung(s, g),
                        "offen": sum(r.brutto for r in offen),
                        "ueberfaellig": sum(1 for r in offen if rechnung_status(r, heute) == "überfällig")})
     belegt = _in_aktiver_gruppe(s)
@@ -520,8 +532,13 @@ def p2p_liste(request: Request, s: Session = Depends(sitzung), _=Depends(verwalt
          "erzeuger": sum(1 for t in p2p_teilnehmer if t.rolle == Rolle.ERZEUGER),
          "abnehmer": sum(1 for t in p2p_teilnehmer if t.rolle == Rolle.ABNEHMER),
          "frei": len(frei), "geteilt": sum(z["a"]["geteilt"] for z in aktiv if z["a"]),
-         "offen": sum(z["offen"] for z in zeilen), "ueberfaellig": sum(z["ueberfaellig"] for z in zeilen)}
+         "offen": sum(z["offen"] for z in zeilen), "ueberfaellig": sum(z["ueberfaellig"] for z in zeilen),
+         "einrichtung_offen": sum(z["einrichtung"].brutto for z in zeilen
+                                  if z["einrichtung"] and not z["einrichtung"].bezahlt_am),
+         "einrichtung_fehlt": sum(1 for z in zeilen if z["g"].status == GruppenStatus.AKTIV
+                                  and not z["einrichtung"])}
     return _seite(request, "p2p_liste.html", zeilen=zeilen, frei=frei, k=k, namen=namen,
+                  einmalig_modus=gebuehren.einmalig(None),
                   bereiche={t.id: kundenlink(t.id) for t in frei})
 
 
@@ -564,7 +581,8 @@ def gruppe_anlegen(s: Session = Depends(sitzung), _=Depends(verwaltung),
         raise HTTPException(400, "Alle müssen beim selben Netzbetreiber sein.")
     menge = matching.geteilte_menge(e, abnehmer)
     g = Gruppe(erzeuger_id=e.id, zonelevel=max(zonen), erwartete_kwh_jahr=round(sum(menge.values())),
-               status=GruppenStatus.VERTRAG_OFFEN, gebuehr_ct_kwh=config.GEBUEHR_STANDARD_CT_KWH)
+               status=GruppenStatus.VERTRAG_OFFEN, gebuehr_ct_kwh=config.GEBUEHR_STANDARD_CT_KWH,
+               einrichtung_eur=config.EINRICHTUNG_EUR)
     s.add(g)
     s.commit()
     s.refresh(g)
@@ -645,6 +663,7 @@ def gruppe_seite(request: Request, gid: int, s: Session = Depends(sitzung), _=De
     namen = {t.id: t.name for t in alle}
     gebuehr_liste = s.exec(select(Gebuehr).where(Gebuehr.gruppe_id == gid).order_by(Gebuehr.bis.desc())).all()
     return _seite(request, "gruppe.html", g=g, alle=alle, unterschriften=unterschriften, links=links,
+                  einrichtung=gebuehren.einrichtung(s, g), einrichtung_ab=gebuehren.EINRICHTUNG_AB,
                   zustimmungen=zustimmungen, rechnungen=rechnungen, stati=list(GruppenStatus), namen=namen,
                   bereiche=bereiche, a=a, tag=tag, tagesdiagramm=tagesdiagramm, vorschlag=vorschlag,
                   gebuehren=gebuehr_liste, frueheste_aenderung=date.today() + timedelta(days=31), **d)
@@ -654,15 +673,25 @@ def gruppe_seite(request: Request, gid: int, s: Session = Depends(sitzung), _=De
 def gruppe_aendern(gid: int, s: Session = Depends(sitzung), _=Depends(verwaltung),
                    status: GruppenStatus = Form(...), preis_ct_kwh: float = Form(0), ust_satz: float = Form(0),
                    rechnung_monatlich: bool = Form(False), marktpartner_id: str = Form(""),
-                   gemeinschafts_id: str = Form(""), notiz: str = Form(""), gebuehr_ct_kwh: float = Form(0)):
+                   gemeinschafts_id: str = Form(""), notiz: str = Form(""),
+                   gebuehr_ct_kwh: float | None = Form(None), einrichtung_eur: float | None = Form(None)):
     g = s.get(Gruppe, gid) or _404()
     if status == GruppenStatus.REGISTRIERT and not (marktpartner_id.strip() and gemeinschafts_id.strip()):
         raise HTTPException(400, "Für „registriert“ bitte Marktpartner-ID und Gemeinschafts-ID eintragen.")
     if preis_ct_kwh != g.preis_ct_kwh and g.status == GruppenStatus.AKTIV:
+        if gebuehren.einmalig(g):
+            raise HTTPException(400, "Der Preis steht im unterschriebenen Vertrag. Ändern können ihn Erzeuger und "
+                                     "Abnehmer nur untereinander.")
         raise HTTPException(400, "In einer aktiven Gruppe ändert sich der Preis nur über „Preisänderung ankündigen“.")
+    if einrichtung_eur is not None and round(einrichtung_eur, 2) != round(g.einrichtung_eur, 2) \
+            and gebuehren.einrichtung(s, g):
+        raise HTTPException(400, "Die Einrichtung ist schon verrechnet, der Betrag lässt sich nicht mehr ändern.")
     g.status, g.preis_ct_kwh, g.ust_satz = status, preis_ct_kwh, ust_satz
     g.rechnung_monatlich = rechnung_monatlich
-    g.gebuehr_ct_kwh = max(0.0, gebuehr_ct_kwh)
+    if gebuehr_ct_kwh is not None:
+        g.gebuehr_ct_kwh = max(0.0, gebuehr_ct_kwh)
+    if einrichtung_eur is not None:
+        g.einrichtung_eur = max(0.0, round(einrichtung_eur, 2))
     g.marktpartner_id = marktpartner_id.strip() or None
     g.gemeinschafts_id = normalisieren(gemeinschafts_id) or None
     g.notiz = notiz.strip() or None
@@ -742,6 +771,7 @@ def _erinnerungen(s: Session):
 async def abrechnen(request: Request, gid: int, report: UploadFile, s: Session = Depends(sitzung),
                     _=Depends(verwaltung)):
     g = s.get(Gruppe, gid) or _404()
+    _laufend_pruefen(g)
     d = _gruppen_daten(s, g)
     try:
         zeilen = abrechnung.report_einlesen((await report.read()).decode("utf-8-sig"))
@@ -754,6 +784,9 @@ async def abrechnen(request: Request, gid: int, report: UploadFile, s: Session =
         if not t:
             uebersprungen.append(maskiert(z.zaehlpunkt))
             continue
+        if _schenkung(g, z.von):
+            uebersprungen.append(f"{maskiert(z.zaehlpunkt)}: Schenkung, keine Rechnung")
+            continue
         r = rechnung_anlegen(s, g, t, z.von, z.bis, z.kwh)
         if not r:
             uebersprungen.append(f"{abrechnung.rechnungsnummer(g.id, t.id, z.bis)} (gibt es schon)")
@@ -763,11 +796,23 @@ async def abrechnen(request: Request, gid: int, report: UploadFile, s: Session =
     return _seite(request, "abrechnung_ergebnis.html", g=g, neu=neu, uebersprungen=uebersprungen, rechnungen=[])
 
 
+def _laufend_pruefen(g: Gruppe):
+    if gebuehren.einmalig(g):
+        raise HTTPException(400, "Bei P2P rechnen Erzeuger und Abnehmer selbst miteinander ab. "
+                                 f"{config.DIENSTLEISTER['firma']} verrechnet nur die Einrichtung.")
+
+
+def _schenkung(g: Gruppe, tag: date) -> bool:
+    """P2P ohne Preis: der Strom ist geschenkt, es gibt keine Rechnung an die Abnehmer."""
+    return g.art == Art.P2P and preis_fuer(g, tag) <= 0
+
+
 def rechnung_anlegen(s: Session, g: Gruppe, t: Teilnehmer, von: date, bis: date, kwh: float,
                      datum: date | None = None, mail: bool = True) -> Rechnung | None:
-    """Eine Rechnung im Namen des Erzeugers. None, wenn es sie für den Zeitraum schon gibt."""
+    """Eine Rechnung im Namen des Erzeugers. None, wenn es sie für den Zeitraum schon gibt oder der
+    Strom geschenkt ist."""
     nummer = abrechnung.rechnungsnummer(g.id, t.id, bis)
-    if s.exec(select(Rechnung).where(Rechnung.nummer == nummer)).first():
+    if _schenkung(g, von) or s.exec(select(Rechnung).where(Rechnung.nummer == nummer)).first():
         return None
     preis = preis_fuer(g, von)
     b = abrechnung.berechnen(kwh, preis, g.ust_satz)
@@ -813,6 +858,7 @@ def abrechnungslauf(request: Request, gid: int, s: Session = Depends(sitzung), _
     """Rechnungen für alle Abnehmer bzw. Wohnungen direkt aus den gespeicherten Energiedaten,
     dazu die Servicegebühr von FIX. Bei einer GEA in Selbstverwaltung nur die Servicegebühr."""
     g = s.get(Gruppe, gid) or _404()
+    _laufend_pruefen(g)
     d = _gruppen_daten(s, g)
     if bis < von:
         raise HTTPException(400, "Das Ende liegt vor dem Beginn.")
@@ -832,6 +878,9 @@ def abrechnungslauf(request: Request, gid: int, s: Session = Depends(sitzung), _
                              f"EDA-Export dafür unter „Energiedaten“ hochladen.")
     neu, uebersprungen = [], []
     nur_gebuehr = nur_gebuehr or (g.art == Art.GEA and g.modell == Modell.SELBST)
+    if not nur_gebuehr and _schenkung(g, von):
+        nur_gebuehr = True
+        uebersprungen.append("Schenkung: keine Rechnungen an die Abnehmer")
     if not nur_gebuehr:
         for t in abnehmer:
             r = rechnung_anlegen(s, g, t, von, bis, werte[t.zaehlpunkt]["eigendeckung"])
@@ -847,6 +896,26 @@ def abrechnungslauf(request: Request, gid: int, s: Session = Depends(sitzung), _
     namen = {t.id: t.name for t in abnehmer}
     return _seite(request, "abrechnung_ergebnis.html", g=g, neu=len(neu), uebersprungen=uebersprungen,
                   rechnungen=neu, namen=namen, gebuehr=gebuehr)
+
+
+@app.post("/verwaltung/gruppe/{gid}/einrichtung")
+def einrichtung_verrechnen(gid: int, s: Session = Depends(sitzung), _=Depends(verwaltung)):
+    """Einmalige Rechnung von FIX an den Erzeuger für das Aufsetzen des P2P-Vertrags. Die Mail
+    dazu landet als Entwurf im Postausgang."""
+    g = s.get(Gruppe, gid) or _404()
+    if g.art != Art.P2P:
+        raise HTTPException(400, "Die Einrichtungsgebühr gibt es nur bei P2P.")
+    if gebuehren.einrichtung(s, g):
+        raise HTTPException(400, "Die Einrichtung ist schon verrechnet.")
+    if g.status not in gebuehren.EINRICHTUNG_AB:
+        raise HTTPException(400, "Verrechnet wird erst, wenn alle unterschrieben haben.")
+    if g.einrichtung_eur <= 0:
+        raise HTTPException(400, "Bitte zuerst den Betrag der Einrichtungsgebühr in den Einstellungen eintragen.")
+    x = gebuehren.einrichtung_anlegen(s, g)
+    e = s.get(Teilnehmer, g.erzeuger_id)
+    s.add(nachrichten.einrichtung(e, g.id, x.nummer, _euro(x.brutto), x.faellig, f"{kundenlink(e.id)}/gebuehr/{x.id}"))
+    s.commit()
+    return RedirectResponse(f"/verwaltung/gruppe/{gid}#abrechnung", status_code=303)
 
 
 def _fehlende_monate(s: Session, zaehlpunkte: list[str], von: date, bis: date, gruppe_id: int | None = None) -> list[str]:
@@ -1311,6 +1380,8 @@ def preisaenderung(gid: int, s: Session = Depends(sitzung), _=Depends(verwaltung
                    neuer_preis: float = Form(...), ab: date = Form(...), grund: str = Form(...)):
     """Preisänderung nach § 69 ElWG: mindestens einen Monat vorher, mit Begründung, an jeden Abnehmer."""
     g = s.get(Gruppe, gid) or _404()
+    if gebuehren.einmalig(g):
+        raise HTTPException(400, "Bei P2P vereinbaren Erzeuger und Abnehmer Preisänderungen untereinander.")
     heute = date.today()
     if ab < heute + timedelta(days=31):
         raise HTTPException(400, "Eine Preisänderung muss mindestens einen Monat vorher angekündigt werden.")
@@ -1408,7 +1479,8 @@ def _mein_daten(s: Session, t: Teilnehmer, token: str) -> dict:
         if z and z.freigegeben_am and not z.erteilt_am:
             frist = z.freigegeben_am + timedelta(days=config.ZUSTIMMUNG_FRIST_TAGE)
             daten["aufgaben"].append((f"Im Kundenportal von Vorarlberg Netz zustimmen, bis {frist:%d.%m.%Y}", None))
-    rechnet_fix = not gea_art or g.modell == Modell.VERWALTET
+    # P2P „einmalig“: FIX stellt keine Rechnungen an die Abnehmer, die IBAN braucht es hier nicht
+    rechnet_fix = (g.modell == Modell.VERWALTET) if gea_art else not gebuehren.einmalig(g)
     if t.rolle == Rolle.ERZEUGER and g.preis_ct_kwh > 0 and rechnet_fix and not t.iban:
         daten["aufgaben"].append(("Konto (IBAN) für die Zahlungen eintragen, siehe unten", None))
     abfrage = select(Rechnung).where(Rechnung.gruppe_id == g.id)
@@ -1418,6 +1490,11 @@ def _mein_daten(s: Session, t: Teilnehmer, token: str) -> dict:
     if t.id == g.erzeuger_id:
         daten["gebuehren"] = s.exec(select(Gebuehr).where(Gebuehr.gruppe_id == g.id)
                                     .order_by(Gebuehr.bis.desc())).all()
+        if gebuehren.einmalig(g):
+            for x in daten["gebuehren"]:
+                if not x.bezahlt_am:
+                    text_ = f"Unsere Rechnung {x.nummer} über {_euro(x.brutto)} € bezahlen, fällig bis {x.faellig:%d.%m.%Y}"
+                    daten["aufgaben"].append((text_, f"/mein/{t.id}/{token}/gebuehr/{x.id}"))
     if daten["betreiber_gea"]:
         daten["a"] = gea.auswerten(s, g)
         daten["zeitraeume"] = gea.zeitraeume(s, g)
