@@ -12,7 +12,7 @@ Bei der GEA kann FIX je geteilter kWh eine Servicegebühr verrechnen (Rechnung v
 | Einstellung | Wirkung |
 |---|---|
 | `NACHBARSTROM_P2P_ABRECHNUNG=einmalig` (Standard) | FIX vermittelt, setzt den Vertrag auf und meldet an. Einmalige Rechnung an den Erzeuger, danach rechnen die Nachbarn selbst ab. Vertrag, Vollmacht und Infoblatt sagen das so. |
-| `NACHBARSTROM_P2P_ABRECHNUNG=laufend` | FIX rechnet jede Periode im Namen des Erzeugers ab und verrechnet die Servicegebühr je kWh (früheres Modell). |
+| `NACHBARSTROM_P2P_ABRECHNUNG=laufend` | FIX rechnet jede Periode im Namen des Erzeugers ab und verrechnet die Servicegebühr je kWh. Ist in der Gruppe eine Einrichtungsgebühr eingetragen, kommt sie einmal dazu (Einmalig plus laufend). |
 | `NACHBARSTROM_EINRICHTUNG_EUR=…` | Einrichtungsgebühr je P2P-Vertrag in Euro netto, Vorschlag für neue Gruppen, in jeder Gruppe änderbar. Ohne Betrag bleibt der Knopf für die Rechnung gesperrt. |
 
 FIX PV handelt als bevollmächtigter Dienstleister, nicht als Organisator.

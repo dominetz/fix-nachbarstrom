@@ -459,10 +459,12 @@ def uebersicht(request: Request, s: Session = Depends(sitzung), _=Depends(verwal
         letzter = auswertung.letzter_tag(s, list(importe.zaehlpunkte(s, g)), g.id)
         was = "Servicegebühr" if g.art == Art.GEA and g.modell == Modell.SELBST else "Abrechnung"
         faellig.append((g, s.get(Teilnehmer, g.erzeuger_id), von, bis, bool(letzter and letzter >= bis), was))
-    # P2P „einmalig“: aktive Gruppen, deren Einrichtung noch nicht verrechnet ist
+    # Aktive P2P-Gruppen, deren Einrichtung noch nicht verrechnet ist: im Modell „einmalig“ immer,
+    # im Modell „laufend“ nur, wenn eine Einrichtungsgebühr eingetragen ist (Einmalig plus laufend)
     einrichtungen = {x.gruppe_id: x for x in alle_gebuehren if x.art == "einrichtung"}
     einrichtung_offen = [(g, s.get(Teilnehmer, g.erzeuger_id)) for g in aktiv
-                         if gebuehren.einmalig(g) and g.id not in einrichtungen]
+                         if g.art == Art.P2P and g.id not in einrichtungen
+                         and (gebuehren.einmalig(g) or g.einrichtung_eur > 0)]
     testmodus = any(t.email.endswith("@example.com") for t in teilnehmer)
     return _seite(request, "verwaltung.html", zeilen=[(g, s.get(Teilnehmer, g.erzeuger_id)) for g in p2p],
                   einrichtungen=einrichtungen, einrichtung_offen=einrichtung_offen,
@@ -915,7 +917,8 @@ def einrichtung_verrechnen(gid: int, s: Session = Depends(sitzung), _=Depends(ve
     e = s.get(Teilnehmer, g.erzeuger_id)
     s.add(nachrichten.einrichtung(e, g.id, x.nummer, _euro(x.brutto), x.faellig, f"{kundenlink(e.id)}/gebuehr/{x.id}"))
     s.commit()
-    return RedirectResponse(f"/verwaltung/gruppe/{gid}#abrechnung", status_code=303)
+    return RedirectResponse(f"/verwaltung/gruppe/{gid}#{'abrechnung' if gebuehren.einmalig(g) else 'einrichtung'}",
+                            status_code=303)
 
 
 def _fehlende_monate(s: Session, zaehlpunkte: list[str], von: date, bis: date, gruppe_id: int | None = None) -> list[str]:
@@ -1490,7 +1493,7 @@ def _mein_daten(s: Session, t: Teilnehmer, token: str) -> dict:
     if t.id == g.erzeuger_id:
         daten["gebuehren"] = s.exec(select(Gebuehr).where(Gebuehr.gruppe_id == g.id)
                                     .order_by(Gebuehr.bis.desc())).all()
-        if gebuehren.einmalig(g):
+        if not gea_art:
             for x in daten["gebuehren"]:
                 if not x.bezahlt_am:
                     text_ = f"Unsere Rechnung {x.nummer} über {_euro(x.brutto)} € bezahlen, fällig bis {x.faellig:%d.%m.%Y}"

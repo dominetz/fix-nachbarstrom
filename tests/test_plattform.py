@@ -1128,3 +1128,33 @@ def test_p2p_schenkung_laufend_nur_servicegebuehr(client, laufend):
     with Session(engine) as s:
         assert not s.exec(select(Rechnung)).all()
         assert s.exec(select(main.Gebuehr)).one().art == "kwh"
+
+
+def test_p2p_einrichtung_plus_laufend(client, laufend):
+    """Einmalig plus laufend: Einrichtungsgebühr und danach die normale Abrechnung mit Servicegebühr."""
+    from app import energiedaten as ed
+    c, engine = client
+    auth = ("admin", "test")
+    _anmelden(c, "erzeuger", 1, anlage_kwp=10, jahresverbrauch_kwh=3000, profiltyp="haushalt")
+    _anmelden(c, "abnehmer", 2)
+    c.post("/verwaltung/gruppe", data={"erzeuger_id": 1, "abnehmer_ids": "2"}, auth=auth)
+    c.post("/verwaltung/gruppe/1", auth=auth, data={"status": "aktiv", "preis_ct_kwh": 10, "ust_satz": 0,
+                                                    "rechnung_monatlich": "true", "gebuehr_ct_kwh": 1.5,
+                                                    "einrichtung_eur": 150})
+    seite = c.get("/verwaltung/gruppe/1", auth=auth).text
+    assert "Einrichtungsgebühr" in seite and "Rechnungen erstellen" in seite and "Preisänderung ankündigen" in seite
+    assert "Einrichtung Gruppe 1" in c.get("/verwaltung", auth=auth).text
+    r = c.post("/verwaltung/gruppe/1/einrichtung", auth=auth, follow_redirects=False)
+    assert r.headers["location"].endswith("#einrichtung")
+    with Session(engine) as s:
+        zeiten = ed.viertelstunden(date(2026, 6, 1), date(2026, 6, 30))
+        spuren = ed.simulieren(s.get(Teilnehmer, 1), [s.get(Teilnehmer, 2)], zeiten)
+    c.post("/verwaltung/energiedaten", auth=auth, files=[("dateien", ("juni.xlsx", ed.export_schreiben(spuren, zeiten, "X")))])
+    seite = c.post("/verwaltung/gruppe/1/abrechnungslauf", auth=auth, data={"von": "2026-06-01", "bis": "2026-06-30"}).text
+    assert "1 Rechnung(en) erstellt" in seite
+    with Session(engine) as s:
+        assert sorted(x.art for x in s.exec(select(main.Gebuehr)).all()) == ["einrichtung", "kwh"]
+    # Der Erzeuger sieht beide Rechnungen von uns und hat sie als Aufgabe
+    bereich = c.get(_pfad(main.kundenlink(1))).text
+    assert "Unsere Rechnungen an Sie" in bereich and "FIX-0001-E" in bereich and "FIX-0001-202606" in bereich
+    assert bereich.count("Unsere Rechnung FIX-0001-") == 2

@@ -63,6 +63,9 @@
 {% for r in rechnungen %}{% if loop.index == 10 %}</table><details><summary class="klein" style="margin:8px 0">Ältere Rechnungen ({{ rechnungen|length - 9 }})</summary><table>{% endif %}<tr><td><a href="/mein/{{ t.id }}/{{ token }}/rechnung/{{ r.id }}">{{ r.nummer }}</a></td>{% if erz %}<td>{% for p in partner %}{% if p.id == r.abnehmer_id %}{{ p.vorname }}{% endif %}{% endfor %}</td>{% endif %}<td>{{ r.von.strftime("%d.%m.%Y") }} – {{ r.bis.strftime("%d.%m.%Y") }}</td><td class="zahl">{{ r.kwh|zahl(1) }}</td><td class="zahl">{{ r.brutto|zahl(2) }} €</td><td>{{ r.faellig.strftime("%d.%m.%Y") }}</td><td>{{ status.rechnung(r) }}</td></tr>
 {% else %}<tr><td colspan="7">Noch keine Rechnungen.</td></tr>{% endfor %}
 </table>{% if rechnungen|length >= 10 %}</details>{% endif %}</div>{% endif %}
+{% if erz and not selbst and gebuehren %}<div class="karte tabelle"><h2>Unsere Rechnungen an Sie</h2>
+<table><tr><th>Nummer</th><th>Leistung</th><th class="zahl">Betrag</th><th>Fällig</th><th>Status</th></tr>
+{% for x in gebuehren %}<tr><td style="white-space:nowrap"><a href="/mein/{{ t.id }}/{{ token }}/gebuehr/{{ x.id }}">{{ x.nummer }}</a></td><td>{% if x.art == "einrichtung" %}Einrichtung{% else %}Servicegebühr {{ x.von.strftime("%d.%m.%Y") }} – {{ x.bis.strftime("%d.%m.%Y") }}{% endif %}</td><td class="zahl">{{ x.brutto|zahl(2) }} €</td><td>{{ x.faellig.strftime("%d.%m.%Y") }}</td><td>{{ status.rechnung(x) }}</td></tr>{% endfor %}</table></div>{% endif %}
 {% endif %}
 
 {% if erz and not selbst %}
