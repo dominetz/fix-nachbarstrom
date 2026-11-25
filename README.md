@@ -2,10 +2,20 @@
 
 Plattform für zwei Modelle:
 
-- **P2P (§ 68 ElWG):** Erzeuger und Abnehmer melden sich an, mit einem Wunschnachbarn oder ohne. Die Plattform schlägt passende Gruppen vor (Überschuss des einen, Netzbezug des anderen), erstellt Vertrag und Vollmacht zur digitalen Unterschrift, bereitet die Anmeldung auf ebUtilities und im EDA-Portal vor, erinnert an die Zustimmung im Netzportal und erstellt Rechnungen im Namen des Erzeugers.
+- **P2P (§ 68 ElWG):** Erzeuger und Abnehmer melden sich an, mit einem Wunschnachbarn oder ohne. Die Plattform schlägt passende Gruppen vor (Überschuss des einen, Netzbezug des anderen), erstellt Vertrag und Vollmacht zur digitalen Unterschrift, bereitet die Anmeldung auf ebUtilities und im EDA-Portal vor, erinnert an die Zustimmung im Netzportal. FIX verrechnet dem Erzeuger einmal die Einrichtung. Will er Auslesung, Monitoring und Rechnungen über FIX, rechnet die Plattform in seinem Namen ab und FIX verrechnet dazu je geteilter kWh. Bei einer Schenkung verrechnet FIX nichts.
 - **GEA (gemeinschaftliche Erzeugungsanlage):** Ein Haus mit PV-Anlage und mehreren Wohnungen. Die Kunden registrieren sich wie gewohnt über EDA/ebUtilities. Jeden Monat wird der EDA-Export hochgeladen (vom Betreiber selbst im Kundenbereich oder von FIX), die Plattform rechnet die Zahlen je Wohnung aus und liefert die Abrechnungsgrundlage. Wahlweise rechnet FIX im Namen des Betreibers ab.
 
 In beiden Modellen kann FIX je geteilter kWh eine Servicegebühr verrechnen (Rechnung von FIX PV GmbH an den Erzeuger bzw. Betreiber).
+
+**P2P-Gebühren:** FIX verrechnet dem Erzeuger immer die Einrichtungsgebühr (einmal, nach der Unterschrift) und eine Servicegebühr je geteilter kWh aus den EDA-Daten. Je Gruppe unter Einstellungen → „Rechnungen an die Abnehmer“ wird nur gewählt, wer die Abnehmer abrechnet (bis zur ersten Unterschrift änderbar, Vertrag, Vollmacht und Infoblatt richten sich danach):
+
+| Rechnungen an die Abnehmer | Was FIX verrechnet |
+|---|---|
+| Über uns | Einrichtung plus Servicegebühr. FIX stellt die Rechnungen an die Abnehmer im Namen des Erzeugers. |
+| Stellt der Erzeuger selbst | Einrichtung plus Servicegebühr. Der Erzeuger sieht in seinem Bereich die geteilten kWh je Abnehmer und Monat. |
+| Schenkung (Preis 0) | Nur die Einrichtung, keine Rechnungen an die Abnehmer. Mit `NACHBARSTROM_SCHENKUNG_GEBUEHR=ja` auch die Servicegebühr. |
+
+Vorschläge für neue Gruppen in der Einstellungsdatei: `NACHBARSTROM_P2P_MODELL` (`verwaltet` = über uns, Standard, oder `selbst`), `NACHBARSTROM_EINRICHTUNG_EUR` (Euro netto, Standard 150), `NACHBARSTROM_P2P_GEBUEHR_CT_KWH` (Standard 1,5) und für GEAs `NACHBARSTROM_GEBUEHR_CT_KWH` (Standard 1,0) und `NACHBARSTROM_SCHENKUNG_GEBUEHR` (`ja` = Servicegebühr auch bei Schenkungen, Standard aus).
 
 FIX PV handelt als bevollmächtigter Dienstleister, nicht als Organisator.
 
@@ -43,6 +53,7 @@ FIX PV handelt als bevollmächtigter Dienstleister, nicht als Organisator.
 | GEA selbst abrechnend (FIX liefert Zahlen + Gebühr) oder von FIX abgerechnet, Aufteilung dynamisch oder statisch | fertig (Stufe 3) |
 | Kundenbereich Betreiber: Export hochladen, Zahlen ansehen, Grundlage herunterladen, Gebühren | fertig (Stufe 3) |
 | Servicegebühr ct/kWh je Gruppe/GEA, eigene Rechnungsnummer FIX-…, Zahlungsstatus | fertig (Stufe 3), USt-Satz prüfen |
+| P2P Einrichtungsgebühr je Vertrag (Rechnung FIX-…-E an den Erzeuger), je Gruppe mit oder ohne Abrechnung über FIX (dann plus Servicegebühr je kWh), Schenkung kostenlos | fertig, Beträge und Texte prüfen |
 | Öffentliche Seiten `/gea` (Anfrage für ein Haus) und `/anfrage` (allgemeine Frage), Liste unter Verwaltung → Anfragen | fertig (Stufe 3) |
 | Automatische EDA-Anbindung (E-Mail/KEP) | braucht Marktpartner-ID und EDA-Zugang |
 | Automatischer Mailversand (SMTP), SEPA-Lastschrift | später, nach Freigabe |
@@ -144,7 +155,8 @@ pytest
 - Frist für die Zustimmung im Netzportal: 7 Tage (Handbuch Vorarlberg Netz), Koordinationsstelle nennt 30 Tage.
 - PV-Ertrag 1.050 kWh je kWp und Jahr, Lastprofile vereinfacht. Durch echte Messwerte ersetzen.
 - Aufbau des EDA-Exports: gebaut nach dem bekannten Aufbau (eine Spalte je Zählpunkt und Messgröße) plus lange Tabellen. Mit dem ersten echten Export prüfen.
-- Servicegebühr: 20 % USt angenommen (FIX PV GmbH an Erzeuger/Betreiber). Mit dem Steuerberater prüfen.
+- Servicegebühr und Einrichtungsgebühr: 20 % USt angenommen (FIX PV GmbH an Erzeuger/Betreiber). Mit dem Steuerberater prüfen.
+- P2P „Erzeuger stellt die Rechnungen selbst“: FIX bleibt laut Vertrag und Vollmacht für An- und Abmeldung und die Messdaten zuständig und bekommt die EDA-Daten weiter. Ob die Servicegebühr in diesem Fall so im Vertrag mit dem Erzeuger stehen muss, rechtlich prüfen.
 - GEA, von FIX abgerechnet: Rechnung im Namen des Betreibers (Vollmacht). Rolle und Rechnungstext rechtlich prüfen.
 - Statische Aufteilung in der GEA: Anteil je Wohnung in %, Rest der Wohnung bleibt beim Lieferanten. Bei dynamischer Aufteilung kommen die Anteile aus dem Export.
 - Rechnungstext und Kleinunternehmer-Hinweis mit dem Steuerberater prüfen.

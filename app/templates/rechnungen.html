@@ -15,10 +15,10 @@
 {% if st == "überfällig" %}<form method="post" action="/verwaltung/rechnung/{{ r.id }}/mahnung" style="display:inline"><button class="klein-knopf">Erinnern</button></form>{% endif %}</td></tr>
 {% else %}<tr><td colspan="9">Keine Rechnungen.</td></tr>{% endfor %}</table></div>
 
-<div class="karte tabelle" id="gebuehren"><h2>Servicegebühren von {{ dienstleister.firma }}</h2>
-<p class="klein">Gebühr je geteilter kWh an Erzeuger und GEA-Betreiber. Diese Beträge gehen an {{ dienstleister.firma }}.</p>
+<div class="karte tabelle" id="gebuehren"><h2>Rechnungen von {{ dienstleister.firma }}</h2>
+<p class="klein">Einrichtung von P2P-Verträgen und Servicegebühr je geteilter kWh, an Erzeuger und GEA-Betreiber. Diese Beträge gehen an {{ dienstleister.firma }}.</p>
 <table><tr><th>Nummer</th><th>Gruppe / GEA</th><th>An</th><th>Zeitraum</th><th class="zahl">kWh</th><th class="zahl">Netto</th><th class="zahl">Brutto</th><th>Status</th><th></th></tr>
-{% for x in gebuehren %}{% set g = gruppen[x.gruppe_id] %}<tr><td><a href="/verwaltung/gebuehr/{{ x.id }}">{{ x.nummer }}</a></td><td><a href="{{ gruppenlink(g) }}">{{ g.titel }}</a></td><td>{{ namen[x.empfaenger_id] }}</td><td>{{ x.von.strftime("%d.%m.%y") }} – {{ x.bis.strftime("%d.%m.%y") }}</td><td class="zahl">{{ x.kwh|zahl(1) }}</td><td class="zahl">{{ x.netto|zahl(2) }} €</td><td class="zahl">{{ x.brutto|zahl(2) }} €</td><td>{{ status.rechnung(x) }}</td>
+{% for x in gebuehren %}{% set g = gruppen[x.gruppe_id] %}<tr><td><a href="/verwaltung/gebuehr/{{ x.id }}">{{ x.nummer }}</a></td><td><a href="{{ gruppenlink(g) }}">{{ g.titel }}</a></td><td>{{ namen[x.empfaenger_id] }}</td><td>{% if x.art == "einrichtung" %}Einrichtung {{ x.bis.strftime("%d.%m.%y") }}{% else %}{{ x.von.strftime("%d.%m.%y") }} – {{ x.bis.strftime("%d.%m.%y") }}{% endif %}</td><td class="zahl">{{ "–" if x.art == "einrichtung" else x.kwh|zahl(1) }}</td><td class="zahl">{{ x.netto|zahl(2) }} €</td><td class="zahl">{{ x.brutto|zahl(2) }} €</td><td>{{ status.rechnung(x) }}</td>
 <td><form method="post" action="/verwaltung/gebuehr/{{ x.id }}/bezahlt"><input type="hidden" name="zurueck" value="/verwaltung/rechnungen?filter={{ filter }}#gebuehren"><button class="zweit klein-knopf">{{ "Offen setzen" if x.bezahlt_am else "Bezahlt" }}</button></form></td></tr>
-{% else %}<tr><td colspan="9">Keine Servicegebühren.</td></tr>{% endfor %}</table></div>
+{% else %}<tr><td colspan="9">Keine Rechnungen von {{ dienstleister.firma }}.</td></tr>{% endfor %}</table></div>
 {% endblock %}

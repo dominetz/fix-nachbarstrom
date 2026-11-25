@@ -14,7 +14,7 @@ from datetime import date, timedelta
 
 from sqlmodel import Session, SQLModel, select
 
-from app import auswertung, config, energiedaten, importe, matching, nachrichten
+from app import auswertung, config, energiedaten, gebuehren, importe, matching, nachrichten
 from app.main import engine, gebuehr_anlegen, kundenlink, rechnung_anlegen
 from app.models import (Anfrage, Art, Gruppe, GruppenStatus, Mitglied, Modell, Profiltyp, Rolle, Teilnehmer,
                         Unterschrift, Zustimmung, jetzt)
@@ -104,7 +104,10 @@ def anlegen(neu: bool = False) -> None:
         for nr, (e, ab, preis, monatlich, zone, status) in enumerate(GRUPPEN, start=1):
             menge = matching.geteilte_menge(leute[e], [leute[a] for a in ab])
             g = Gruppe(erwartete_kwh_jahr=round(sum(menge.values())), erzeuger_id=leute[e].id, status=status, zonelevel=zone, preis_ct_kwh=preis,
-                       rechnung_monatlich=monatlich, marktpartner_id=f"PP90000{nr}", gebuehr_ct_kwh=1.0,
+                       rechnung_monatlich=monatlich, marktpartner_id=f"PP90000{nr}", gebuehr_ct_kwh=config.P2P_GEBUEHR_CT_KWH,
+                       einrichtung_eur=config.EINRICHTUNG_EUR,
+                       # Gruppe 3: der Erzeuger stellt die Rechnungen selbst, wir verrechnen Einrichtung und Servicegebühr
+                       modell=Modell.SELBST if nr == 3 else Modell.VERWALTET,
                        gemeinschafts_id=f"AT{NB}0000000000000000000TEST{nr:04d}",
                        aktiv_seit=JAHR_VON if status == GruppenStatus.AKTIV else None,
                        notiz="Testgruppe, erfundene Daten")
@@ -178,9 +181,12 @@ def anlegen(neu: bool = False) -> None:
                                                                     g.gemeinschafts_id))
         s.commit()
 
-        # Gruppe 1 rechnet monatlich ab: Oktober bis August schon abgerechnet, bis Juli bezahlt
+        # Gruppe 1 hat die Einrichtung bezahlt, bei Gruppe 2 ist sie noch zu verrechnen. Gruppe 1 rechnet
+        # über uns monatlich ab: Oktober bis August abgerechnet, bis Juli bezahlt
         g, e, ab = gruppen[0]
-        for erster, letzter in energiedaten.monate(JAHR_VON, date(2026, 8, 31)):
+        x = gebuehren.einrichtung_anlegen(s, g, datum=JAHR_VON)
+        x.bezahlt_am = JAHR_VON + timedelta(days=9)
+        for erster, letzter in ([] if gebuehren.einmalig(g) else energiedaten.monate(JAHR_VON, date(2026, 8, 31))):
             werte = auswertung.summen(s, [a.zaehlpunkt for a in ab], erster, letzter, g.id)
             for a in ab:
                 r = rechnung_anlegen(s, g, a, erster, letzter, werte[a.zaehlpunkt]["eigendeckung"],

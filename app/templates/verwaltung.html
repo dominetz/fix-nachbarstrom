@@ -40,11 +40,12 @@
 {% if k.uploads %}<li><span>{{ k.uploads }} Export(e) warten auf Zuordnung</span><a class="knopf klein-knopf" href="/verwaltung/energiedaten">Ansehen</a></li>{% endif %}
 {% for g, e, von, bis, moeglich, was in faellig %}{% if moeglich %}<li><span>{{ was }} {{ g.titel }}{% if g.art.value == "p2p" %} ({{ e.name }}){% endif %}: {{ von.strftime("%d.%m.%Y") }} – {{ bis.strftime("%d.%m.%Y") }}</span><a class="knopf klein-knopf" href="{{ gruppenlink(g) }}#abrechnung">Abrechnen</a></li>
 {% else %}<li><span class="klein">{{ g.titel }}: nächste {{ was }} bis {{ bis.strftime("%d.%m.%Y") }}, Energiedaten fehlen noch</span><a class="knopf zweit klein-knopf" href="{{ gruppenlink(g) }}">Ansehen</a></li>{% endif %}{% endfor %}
+{% for g, e in einrichtung_offen %}<li><span>Einrichtung {{ g.titel }} ({{ e.name }}) verrechnen{% if g.einrichtung_eur <= 0 %}, Betrag fehlt noch{% endif %}</span><a class="knopf klein-knopf" href="{{ gruppenlink(g) }}#einrichtung">Verrechnen</a></li>{% endfor %}
 {% if k.ueberfaellig %}<li><span>{{ k.ueberfaellig }} Rechnung(en) überfällig</span><a class="knopf zweit klein-knopf" href="/verwaltung/rechnungen?filter=überfällig">Ansehen</a></li>{% endif %}
 {% if anzahl_erinnerungen %}<li><span>{{ anzahl_erinnerungen }} Erinnerung(en) an die Zustimmung im Netzportal</span><a class="knopf zweit klein-knopf" href="/verwaltung/erinnerungen">Ansehen</a></li>{% endif %}
 {% if k.postausgang %}<li><span>{{ k.postausgang }} Mail(s) im Postausgang</span><a class="knopf zweit klein-knopf" href="/verwaltung/postausgang">Ansehen</a></li>{% endif %}
 {% if k.frei %}<li><span>{{ k.frei }} Teilnehmer ohne Gruppe</span><a class="knopf zweit klein-knopf" href="/verwaltung/matching">Matching</a></li>{% endif %}
-{% if not (faellig or k.ueberfaellig or anzahl_erinnerungen or k.postausgang or k.frei or k.anfragen or k.uploads) %}<li class="klein">Nichts offen.</li>{% endif %}
+{% if not (faellig or einrichtung_offen or k.ueberfaellig or anzahl_erinnerungen or k.postausgang or k.frei or k.anfragen or k.uploads) %}<li class="klein">Nichts offen.</li>{% endif %}
 </ul></div>
 </div>
 
@@ -54,8 +55,8 @@
 {% else %}<tr><td colspan="6">Noch keine GEA.</td></tr>{% endfor %}</table></div></div>
 
 <div class="karte" id="gruppen"><h2>P2P-Gruppen</h2>
-<div class="tabelle"><table><tr><th>Nr.</th><th>Erzeuger</th><th>Status</th><th class="zahl">Erwartet kWh/Jahr</th><th>Zone</th><th>Rechnung</th><th class="zahl">Preis</th></tr>
-{% for g, e in zeilen %}<tr><td><a href="/verwaltung/gruppe/{{ g.id }}">{{ g.id }}</a></td><td><a href="/verwaltung/gruppe/{{ g.id }}">{{ e.name }}</a><br><span class="klein">{{ e.ort }} · {{ e.anlage_kwp|zahl(1) }} kWp</span></td><td>{{ status.gruppe(g.status) }}</td><td class="zahl">{{ g.erwartete_kwh_jahr|zahl }}</td><td>{{ g.zonelevel }}</td><td>{{ "monatlich" if g.rechnung_monatlich else "jährlich" }}</td><td class="zahl">{{ g.preis_ct_kwh|zahl(2) }} ct</td></tr>
+<div class="tabelle"><table><tr><th>Nr.</th><th>Erzeuger</th><th>Status</th><th class="zahl">Erwartet kWh/Jahr</th><th>Zone</th><th>Abrechnung</th><th class="zahl">Preis</th></tr>
+{% for g, e in zeilen %}<tr><td><a href="/verwaltung/gruppe/{{ g.id }}">{{ g.id }}</a></td><td><a href="/verwaltung/gruppe/{{ g.id }}">{{ e.name }}</a><br><span class="klein">{{ e.ort }} · {{ e.anlage_kwp|zahl(1) }} kWp</span></td><td>{{ status.gruppe(g.status) }}</td><td class="zahl">{{ g.erwartete_kwh_jahr|zahl }}</td><td>{{ g.zonelevel }}</td><td>{% if einmalig(g) %}{% set x = einrichtungen.get(g.id) %}{% if x %}Einrichtung {{ status.rechnung(x) }}{% else %}<span class="klein">Einrichtung noch nicht verrechnet</span>{% endif %}{% else %}{{ "monatlich" if g.rechnung_monatlich else "jährlich" }}{% endif %}</td><td class="zahl">{% if g.preis_ct_kwh > 0 %}{{ g.preis_ct_kwh|zahl(2) }} ct{% else %}Schenkung{% endif %}</td></tr>
 {% else %}<tr><td colspan="7">Noch keine Gruppen. Vorschläge gibt es unter <a href="/verwaltung/matching">Matching</a>.</td></tr>{% endfor %}
 </table></div></div>
 {% endblock %}
