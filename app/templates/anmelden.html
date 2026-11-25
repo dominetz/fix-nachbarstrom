@@ -3,7 +3,7 @@
 <h1>{% if rolle.value == "erzeuger" %}Als Erzeuger anmelden{% else %}Als Abnehmer anmelden{% endif %}</h1>
 {% if erzeuger %}<div class="hinweis">Sie wurden von {{ erzeuger.vorname }} eingeladen. Nach der Anmeldung prüfen wir, ob Sie gemeinsam Strom teilen können.</div>{% endif %}
 {% if fehler %}<div class="fehler">{% for f in fehler %}<div>{{ f }}</div>{% endfor %}</div>{% endif %}
-<form method="post" action="/anmelden">
+<div class="karte formular"><form method="post" action="/anmelden">
 <input type="hidden" name="rolle" value="{{ rolle.value }}"><input type="hidden" name="einladung" value="{{ einladung or '' }}">
 <div class="raster">
 <div><label>Vorname</label><input name="vorname" required value="{{ werte.vorname }}"></div>
@@ -62,5 +62,5 @@
 <p class="klein">Dann versuchen wir zuerst, Sie beide zusammenzubringen. Nach der Anmeldung bekommen Sie außerdem einen Einladungslink, den Sie weitergeben können. Ohne Wunschpartner suchen wir passende Partner in Ihrer Nähe, deren Erzeugung und Verbrauch zusammenpassen.</p>{% endif %}
 <label><input type="checkbox" name="einwilligung" value="true" {{ "checked" if werte.einwilligung }}> Ich willige ein, dass {{ dienstleister.firma }} meine Angaben und Viertelstundenwerte nutzt, um passende Partner zu finden. Partner sehen vor Vertragsabschluss nur Ortsteil und erwartete Menge, nicht meinen Namen. Ich kann die Einwilligung jederzeit widerrufen.</label>
 <p><button>Anmelden</button></p>
-</form>
+</form></div>
 {% endblock %}

@@ -36,7 +36,7 @@ $env:NACHBARSTROM_ADMIN_PASSWORD = [Runtime.InteropServices.Marshal]::PtrToStrin
     [Runtime.InteropServices.Marshal]::SecureStringToBSTR($sicher))
 
 Write-Host ""
-Write-Host "Fix Nachbarstrom laeuft auf http://localhost:8000" -ForegroundColor Green
+Write-Host "FIX Nachbarstrom laeuft auf http://localhost:8000" -ForegroundColor Green
 Write-Host "Verwaltung: http://localhost:8000/verwaltung"
 Write-Host "Zum Beenden dieses Fenster schliessen."
 Start-Process "http://localhost:8000/verwaltung"

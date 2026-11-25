@@ -1,5 +1,5 @@
 {% extends "basis.html" %}
 {% block inhalt %}
-<p class="klein nicht-drucken"><a href="{{ zurueck }}">← Zurück zu Mein {{ marke }}</a> · Zum Speichern als PDF: Drucken → „Als PDF speichern“.</p>
-{% include "_rechnung_inhalt.html" %}
+<div class="belegleiste nicht-drucken"><p class="klein"><a href="{{ zurueck }}">← Zurück zu Mein {{ marke }}</a> · Zum Speichern als PDF: Drucken → „Als PDF speichern“.</p></div>
+<article class="beleg">{% include "_rechnung_inhalt.html" %}</article>
 {% endblock %}

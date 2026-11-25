@@ -1,12 +1,12 @@
 {# Ergebnis eines oder mehrerer Imports. Erwartet: ergebnisse #}
 <div class="karte"><h2>Import</h2>
 {% for e in ergebnisse %}
-<div style="padding:10px 0;border-bottom:1px solid var(--linie)">
+<div class="importzeile">
 <b>{{ e.datei }}</b>
 {% if e.fehler %}
  <span class="badge rot">nicht lesbar</span>
  <p>{{ e.fehler }}</p>
- <details><summary class="klein">Aufbau der Datei anzeigen (ohne Zählpunktnummern und Namen, zum Weitergeben)</summary><pre style="white-space:pre-wrap;font-size:.8rem;background:var(--hell);padding:10px;border-radius:8px">{{ e.bericht }}</pre></details>
+ <details><summary class="klein">Aufbau der Datei anzeigen (ohne Zählpunktnummern und Namen, zum Weitergeben)</summary><pre class="vorlage bericht">{{ e.bericht }}</pre></details>
 {% elif e.zuordnen %}
  <span class="badge warn">Spalten zuordnen</span>
  <p>{{ e.anzahl_zp }} Zählpunkte, {{ e.von.strftime("%d.%m.%Y") }} – {{ e.bis.strftime("%d.%m.%Y") }}. Diese Spalten kennt die Plattform noch nicht: {{ e.unbekannt|join(", ") }}.</p>

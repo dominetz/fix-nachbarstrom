@@ -1,10 +1,10 @@
 {% extends "verwaltung_basis.html" %}
 {% block inhalt %}
-<p class="klein"><a href="/verwaltung/gea">← GEA</a></p>
+<p class="zurueck"><a href="/verwaltung/gea">← GEA</a></p>
 <h1>Neue GEA anlegen</h1>
 <p class="unter">Am schnellsten mit dem EDA-Export der GEA: Zählpunkte, Gemeinschafts-ID und Zeitraum kommen dann aus der Datei, der Erzeugungszählpunkt wird zur Anlage, alle anderen zu Wohnungen. Namen der Wohnungen trägst du danach nach.</p>
 {% if fehler %}<div class="fehler">{% for f in fehler %}<div>{{ f }}</div>{% endfor %}</div>{% endif %}
-{% if bericht %}<details open><summary class="klein">Aufbau der Datei (ohne Zählpunktnummern und Namen, zum Weitergeben)</summary><pre style="white-space:pre-wrap;font-size:.8rem;background:#fff;padding:10px;border-radius:8px;border:1px solid var(--linie)">{{ bericht }}</pre></details>{% endif %}
+{% if bericht %}<details open><summary class="klein">Aufbau der Datei (ohne Zählpunktnummern und Namen, zum Weitergeben)</summary><pre class="vorlage bericht">{{ bericht }}</pre></details>{% endif %}
 {% if anfrage %}<div class="hinweis">Aus der Anfrage von {{ anfrage.name }} vom {{ anfrage.erstellt.strftime("%d.%m.%Y") }}.</div>{% endif %}
 <form method="post" enctype="multipart/form-data">
 {% if anfrage %}<input type="hidden" name="anfrage_id" value="{{ anfrage.id }}">{% endif %}

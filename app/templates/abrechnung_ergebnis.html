@@ -3,12 +3,12 @@
 {% block inhalt %}
 <h1>Abrechnung {{ g.titel }}</h1>
 {% if fehler %}<div class="fehler">{{ fehler }}</div>
-<p><a class="knopf" href="/verwaltung/energiedaten">Zu den Energiedaten</a> <a class="knopf zweit" href="{{ gruppenlink(g) }}#abrechnung">Zurück</a></p>
+<p class="werkzeuge"><a class="knopf" href="/verwaltung/energiedaten">Zu den Energiedaten</a> <a class="knopf zweit" href="{{ gruppenlink(g) }}#abrechnung">Zurück</a></p>
 {% else %}
 {% if neu or not gebuehr %}<div class="hinweis">{{ neu }} Rechnung(en) erstellt. Die Mails dazu liegen im <a href="/verwaltung/postausgang">Postausgang</a>.</div>{% endif %}
 {% if gebuehr %}<div class="hinweis">Servicegebühr <a href="/verwaltung/gebuehr/{{ gebuehr.id }}">{{ gebuehr.nummer }}</a> erstellt: {{ gebuehr.kwh|zahl(1) }} kWh × {{ gebuehr.ct_kwh|zahl(2) }} ct = {{ gebuehr.netto|zahl(2) }} € netto, {{ gebuehr.brutto|zahl(2) }} € brutto.</div>{% endif %}
-{% if rechnungen %}<div class="karte"><table><tr><th>Nummer</th><th>{{ "Wohnung" if g.art.value == "gea" else "Abnehmer" }}</th><th>Zeitraum</th><th class="zahl">kWh</th><th class="zahl">Brutto</th><th>Status</th></tr>
-{% for r in rechnungen %}<tr><td><a href="/verwaltung/rechnung/{{ r.id }}">{{ r.nummer }}</a></td><td>{{ namen[r.abnehmer_id] }}</td><td>{{ r.von.strftime("%d.%m.%Y") }} – {{ r.bis.strftime("%d.%m.%Y") }}</td><td class="zahl">{{ r.kwh|zahl(1) }}</td><td class="zahl">{{ r.brutto|zahl(2) }} €</td><td>{{ status.rechnung(r) }}</td></tr>{% endfor %}</table></div>{% endif %}
+{% if rechnungen %}<div class="karte"><div class="tabelle"><table class="stapel"><tr class="kopf"><th>Nummer</th><th>{{ "Wohnung" if g.art.value == "gea" else "Abnehmer" }}</th><th>Zeitraum</th><th class="zahl">kWh</th><th class="zahl">Brutto</th><th>Status</th></tr>
+{% for r in rechnungen %}<tr><td class="nw"><a href="/verwaltung/rechnung/{{ r.id }}">{{ r.nummer }}</a></td><td>{{ namen[r.abnehmer_id] }}</td><td class="nw">{{ r.von.strftime("%d.%m.%Y") }} – {{ r.bis.strftime("%d.%m.%Y") }}</td><td class="zahl" data-nach="kWh">{{ r.kwh|zahl(1) }}</td><td class="zahl m-betrag">{{ r.brutto|zahl(2) }} €</td><td class="m-status">{{ status.rechnung(r) }}</td></tr>{% endfor %}</table></div></div>{% endif %}
 {% if uebersprungen %}<div class="warnung">Übersprungen: {{ uebersprungen|join(", ") }}</div>{% endif %}
 <p><a class="knopf" href="{{ gruppenlink(g) }}#abrechnung">Zurück</a></p>
 {% endif %}

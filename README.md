@@ -1,4 +1,4 @@
-# Fix Nachbarstrom
+# FIX Nachbarstrom
 
 Plattform für zwei Modelle:
 
