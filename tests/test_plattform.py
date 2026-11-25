@@ -1040,18 +1040,22 @@ def _pfad(link: str) -> str:
 
 
 def test_p2p_einmalig_einrichtung(client, einmalig):
+    """Erzeuger stellt die Rechnungen selbst: wir verrechnen Einrichtung und Servicegebühr und liefern die Zahlen."""
     from app import config
+    from app import energiedaten as ed
     c, engine = client
     auth = ("admin", "test")
     _anmelden(c, "erzeuger", 1, anlage_kwp=10, jahresverbrauch_kwh=3000, profiltyp="haushalt")
     _anmelden(c, "abnehmer", 2)
     r = c.post("/verwaltung/gruppe", data={"erzeuger_id": 1, "abnehmer_ids": "2"}, auth=auth, follow_redirects=False)
     gid = int(r.headers["location"].rsplit("/", 1)[1])
-    assert "Schenkung: wir verrechnen nichts" in c.get(f"/verwaltung/gruppe/{gid}", auth=auth).text  # Preis 0
+    assert "keine Rechnungen an die Abnehmer und keine Servicegebühr" in c.get(f"/verwaltung/gruppe/{gid}",
+                                                                                auth=auth).text  # Preis 0
     c.post(f"/verwaltung/gruppe/{gid}", auth=auth, data={"status": "vertrag_offen", "preis_ct_kwh": 10, "ust_satz": 0})
     seite = c.get(f"/verwaltung/gruppe/{gid}", auth=auth).text
     assert "Einrichtungsgebühr" in seite and "Noch kein Betrag festgelegt" in seite
     assert "Preisänderung ankündigen" not in seite and "Rechnungen erstellen" not in seite
+    assert "Servicegebühr erstellen" in seite
     # Vor der Unterschrift wird nichts verrechnet
     assert c.post(f"/verwaltung/gruppe/{gid}/einrichtung", auth=auth).status_code == 400
 
@@ -1075,15 +1079,26 @@ def test_p2p_einmalig_einrichtung(client, einmalig):
     assert c.post(f"/verwaltung/gruppe/{gid}", auth=auth, data={"status": "aktiv", "preis_ct_kwh": 10,
                                                                 "ust_satz": 0, "einrichtung_eur": 99}).status_code == 400
     assert "für die Einrichtung" in c.get("/verwaltung/postausgang", auth=auth).text
-    # Keine laufende Abrechnung und keine Preisänderung über FIX
-    assert c.post(f"/verwaltung/gruppe/{gid}/abrechnungslauf", auth=auth,
-                  data={"von": "2026-06-01", "bis": "2026-06-30"}).status_code == 400
+    # Laufend: nur die Servicegebühr an den Erzeuger, keine Rechnungen an die Abnehmer, keine Preisänderung über FIX
+    with Session(engine) as s:
+        zeiten = ed.viertelstunden(date(2026, 6, 1), date(2026, 6, 30))
+        spuren = ed.simulieren(s.get(Teilnehmer, 1), [s.get(Teilnehmer, 2)], zeiten)
+    c.post("/verwaltung/energiedaten", auth=auth, files=[("dateien", ("juni.xlsx", ed.export_schreiben(spuren, zeiten, "X")))])
+    seite = c.post(f"/verwaltung/gruppe/{gid}/abrechnungslauf", auth=auth,
+                   data={"von": "2026-06-01", "bis": "2026-06-30"}).text
+    assert f">FIX-{gid:04d}-202606</a> erstellt" in seite
+    with Session(engine) as s:
+        assert not s.exec(select(Rechnung)).all()
+        assert sorted(y.art for y in s.exec(select(main.Gebuehr)).all()) == ["einrichtung", "kwh"]
+    assert c.post(f"/verwaltung/gruppe/{gid}/abrechnung", auth=auth,
+                  files={"report": ("r.csv", b"zaehlpunkt;von;bis;kwh\n")}).status_code == 400
     assert c.post(f"/verwaltung/gruppe/{gid}/preisaenderung", auth=auth,
                   data={"neuer_preis": 12, "ab": str(date.today() + timedelta(days=40)), "grund": "x"}).status_code == 400
 
     # Vertrag, Vollmacht und Infoblatt: der Erzeuger rechnet selbst ab
     vertrag = c.get(f"/verwaltung/gruppe/{gid}/vertrag", auth=auth).text
     assert "Die Rechnung stellt der Erzeuger selbst" in vertrag and "im Namen des Erzeugers" not in vertrag
+    assert "Prüfung der Messdaten" in vertrag and "Den Abnehmern verrechnet" in vertrag
     assert "Rechnungen und Gutschriften" not in c.get(f"/verwaltung/gruppe/{gid}/vollmacht", auth=auth).text
     assert "Stellt der Erzeuger selbst" in c.get(f"/verwaltung/gruppe/{gid}/infoblatt", auth=auth).text
 
@@ -1091,6 +1106,7 @@ def test_p2p_einmalig_einrichtung(client, einmalig):
     bereich = _pfad(main.kundenlink(1))
     seite = c.get(bereich).text
     assert f"{bereich}/gebuehr/{x.id}" in seite and "Unsere Rechnung" in seite and "Konto für Zahlungen" not in seite
+    assert "Zahlen für Ihre Rechnungen" in seite
     rechnung = c.get(f"{bereich}/gebuehr/{x.id}").text
     assert "Einrichtung Peer-to-Peer-Vertrag" in rechnung and "Leistungsdatum" in rechnung
     assert "Ihre Rechnung kommt direkt vom Erzeuger" in c.get(_pfad(main.kundenlink(2))).text
@@ -1102,12 +1118,14 @@ def test_p2p_schenkung_ohne_rechnung(client, einmalig):
     _anmelden(c, "erzeuger", 1, anlage_kwp=10, jahresverbrauch_kwh=3000, profiltyp="haushalt")
     _anmelden(c, "abnehmer", 2)
     c.post("/verwaltung/gruppe", data={"erzeuger_id": 1, "abnehmer_ids": "2"}, auth=auth)
-    assert "Es gibt keine Rechnung" in c.get("/verwaltung/gruppe/1/vertrag", auth=auth).text
+    assert "Der Abnehmer bekommt keine Rechnung" in c.get("/verwaltung/gruppe/1/vertrag", auth=auth).text
     assert "Keine, der Strom ist geschenkt" in c.get("/verwaltung/gruppe/1/infoblatt", auth=auth).text
     assert "Der Strom ist geschenkt" in c.get(_pfad(main.kundenlink(2))).text
 
 
-def test_p2p_schenkung_ueber_fix_kostenlos(client, laufend):
+def test_p2p_schenkung_nur_einrichtung(client, laufend, monkeypatch):
+    """Schenkung: keine Rechnungen an die Abnehmer, die Einrichtung schon. Die Servicegebühr nur mit Schalter."""
+    from app import config
     from app import energiedaten as ed
     c, engine = client
     auth = ("admin", "test")
@@ -1117,18 +1135,31 @@ def test_p2p_schenkung_ueber_fix_kostenlos(client, laufend):
     c.post("/verwaltung/gruppe/1", auth=auth, data={"status": "aktiv", "preis_ct_kwh": 0, "ust_satz": 0,
                                                     "rechnung_monatlich": "true", "gebuehr_ct_kwh": 1.5,
                                                     "einrichtung_eur": 150})
-    assert "Einrichtung Gruppe 1" not in c.get("/verwaltung", auth=auth).text
-    assert c.post("/verwaltung/gruppe/1/einrichtung", auth=auth).status_code == 400
-    assert "Für eine Schenkung verrechnet" in c.get("/verwaltung/gruppe/1/vertrag", auth=auth).text
+    assert "Einrichtung Gruppe 1" in c.get("/verwaltung", auth=auth).text
+    assert c.post("/verwaltung/gruppe/1/einrichtung", auth=auth, follow_redirects=False).status_code == 303
+    vertrag = c.get("/verwaltung/gruppe/1/vertrag", auth=auth).text
+    assert "Der Abnehmer bekommt keine Rechnung" in vertrag and "vereinbart" in vertrag
+    assert "Für eine Schenkung verrechnet" not in vertrag
     with Session(engine) as s:
         zeiten = ed.viertelstunden(date(2026, 6, 1), date(2026, 6, 30))
         spuren = ed.simulieren(s.get(Teilnehmer, 1), [s.get(Teilnehmer, 2)], zeiten)
     c.post("/verwaltung/energiedaten", auth=auth, files=[("dateien", ("juni.xlsx", ed.export_schreiben(spuren, zeiten, "X")))])
-    seite = c.post("/verwaltung/gruppe/1/abrechnungslauf", auth=auth, data={"von": "2026-06-01", "bis": "2026-06-30"}).text
-    assert "Schenkung: wir verrechnen nichts" in seite and "gibt es schon" not in seite
+    lauf = {"von": "2026-06-01", "bis": "2026-06-30"}
+    seite = c.post("/verwaltung/gruppe/1/abrechnungslauf", auth=auth, data=lauf).text
+    assert "und keine Servicegebühr" in seite and "gibt es schon" not in seite
     with Session(engine) as s:
         assert not s.exec(select(Rechnung)).all()
-        assert not s.exec(select(main.Gebuehr)).all()
+        assert [x.art for x in s.exec(select(main.Gebuehr)).all()] == ["einrichtung"]
+    assert "Der Strom ist geschenkt" in c.get(_pfad(main.kundenlink(2))).text
+
+    # Später „bei allen mitschneiden“: dann auch bei Schenkungen die Servicegebühr
+    monkeypatch.setattr(config, "SCHENKUNG_SERVICEGEBUEHR", True)
+    assert "Servicegebühr erstellen" in c.get("/verwaltung/gruppe/1", auth=auth).text
+    seite = c.post("/verwaltung/gruppe/1/abrechnungslauf", auth=auth, data=lauf).text
+    assert ">FIX-0001-202606</a> erstellt" in seite
+    with Session(engine) as s:
+        assert not s.exec(select(Rechnung)).all()
+        assert sorted(x.art for x in s.exec(select(main.Gebuehr)).all()) == ["einrichtung", "kwh"]
 
 
 def test_p2p_einrichtung_plus_laufend(client, laufend):

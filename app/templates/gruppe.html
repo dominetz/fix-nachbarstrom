@@ -1,10 +1,10 @@
 {% extends "verwaltung_basis.html" %}
 {% import "_status.html" as status %}
 {% block inhalt %}
-{% set selbst = einmalig(g) %}{# ohne Abrechnung über FIX: wir verrechnen nur die Einrichtung #}
+{% set selbst = einmalig(g) %}{# Erzeuger stellt die Rechnungen an die Abnehmer selbst, wir liefern die Zahlen #}
 <p class="klein nicht-drucken"><a href="/verwaltung">← Übersicht</a></p>
 <h1>Gruppe {{ g.id }}: {{ erzeuger.name }}</h1>
-<p class="unter">{{ status.gruppe(g.status) }} · Zone {{ g.zonelevel }} · {% if g.preis_ct_kwh > 0 %}{{ g.preis_ct_kwh|zahl(2) }} ct/kWh netto{% else %}Schenkung{% endif %} · {% if g.preis_ct_kwh <= 0 %}kostenlos{% elif selbst %}Erzeuger rechnet selbst ab{% else %}Abrechnung über uns, {{ "monatlich" if g.rechnung_monatlich else "jährlich" }}{% endif %}{% if g.aktiv_seit %} · aktiv seit {{ g.aktiv_seit.strftime("%d.%m.%Y") }}{% endif %}</p>
+<p class="unter">{{ status.gruppe(g.status) }} · Zone {{ g.zonelevel }} · {% if g.preis_ct_kwh > 0 %}{{ g.preis_ct_kwh|zahl(2) }} ct/kWh netto{% else %}Schenkung{% endif %} · {% if g.preis_ct_kwh <= 0 %}keine Rechnungen an Abnehmer{% elif selbst %}Erzeuger rechnet selbst ab{% else %}Abrechnung über uns, {{ "monatlich" if g.rechnung_monatlich else "jährlich" }}{% endif %}{% if g.aktiv_seit %} · aktiv seit {{ g.aktiv_seit.strftime("%d.%m.%Y") }}{% endif %}</p>
 <p class="nicht-drucken"><a class="knopf zweit" href="/verwaltung/gruppe/{{ g.id }}/vertrag">Vertrag</a> <a class="knopf zweit" href="/verwaltung/gruppe/{{ g.id }}/vollmacht">Vollmacht</a> <a class="knopf zweit" href="/verwaltung/gruppe/{{ g.id }}/anmeldung">Daten für ebUtilities und EDA</a> <a class="knopf zweit" href="/verwaltung/gruppe/{{ g.id }}/infoblatt">Informationsblatt</a></p>
 
 {% if a %}
@@ -37,42 +37,41 @@
 <button class="zweit klein-knopf">Speichern</button></form></td></tr>{% endfor %}
 </table></div></div>
 
-<div class="karte" id="{{ 'abrechnung' if selbst else 'einrichtung' }}"><h2>Einrichtungsgebühr</h2>
-<p class="klein">{% if selbst %}Wir verrechnen das Aufsetzen einmal an den Erzeuger. Danach rechnen Erzeuger und Abnehmer selbst miteinander ab{% if g.preis_ct_kwh <= 0 %}, bei einer Schenkung gibt es gar keine Rechnung{% endif %}.{% else %}Einmal für das Aufsetzen, an den Erzeuger. Dazu kommt die laufende Servicegebühr je kWh aus der Abrechnung unten. Ohne Betrag gibt es keine Einrichtungsgebühr.{% endif %}</p>
-{% if not einrichtung and g.preis_ct_kwh <= 0 %}<p class="hinweis">Schenkung: wir verrechnen nichts, weder die Einrichtung noch eine Servicegebühr.</p>
-{% elif einrichtung %}{% set x = einrichtung %}
+{% set schenk = g.preis_ct_kwh <= 0 %}{% set nur_geb = selbst or schenk %}
+<div class="karte" id="einrichtung"><h2>Einrichtungsgebühr</h2>
+<p class="klein">Einmal für das Aufsetzen, an den Erzeuger{% if schenk %}, auch bei einer Schenkung{% endif %}. Dazu kommt die Servicegebühr je geteilter kWh{% if schenk and not schenkung_gebuehr %}, außer bei einer Schenkung{% endif %}.</p>
+{% if einrichtung %}{% set x = einrichtung %}
 <div class="tabelle"><table><tr><th>Nummer</th><th>Datum</th><th class="zahl">Netto</th><th class="zahl">Brutto</th><th>Status</th><th></th></tr>
 <tr><td><a href="/verwaltung/gebuehr/{{ x.id }}">{{ x.nummer }}</a></td><td>{{ x.datum.strftime("%d.%m.%Y") }}</td><td class="zahl">{{ x.netto|zahl(2) }} €</td><td class="zahl">{{ x.brutto|zahl(2) }} €</td><td>{{ status.rechnung(x) }}</td>
-<td><form method="post" action="/verwaltung/gebuehr/{{ x.id }}/bezahlt"><input type="hidden" name="zurueck" value="/verwaltung/gruppe/{{ g.id }}#abrechnung"><button class="zweit klein-knopf">{{ "Offen setzen" if x.bezahlt_am else "Bezahlt" }}</button></form></td></tr></table></div>
+<td><form method="post" action="/verwaltung/gebuehr/{{ x.id }}/bezahlt"><input type="hidden" name="zurueck" value="/verwaltung/gruppe/{{ g.id }}#einrichtung"><button class="zweit klein-knopf">{{ "Offen setzen" if x.bezahlt_am else "Bezahlt" }}</button></form></td></tr></table></div>
 {% elif g.einrichtung_eur <= 0 %}<p class="hinweis">Noch kein Betrag festgelegt. Bitte unten in den Einstellungen eintragen.</p>
 {% elif g.status not in einrichtung_ab %}<p>{{ g.einrichtung_eur|zahl(2) }} € netto. Verrechnet wird, sobald alle unterschrieben haben.</p>
 {% else %}<form method="post" action="/verwaltung/gruppe/{{ g.id }}/einrichtung">
 <p>{{ g.einrichtung_eur|zahl(2) }} € netto{% if dienstleister_ust %} zuzüglich {{ (dienstleister_ust*100)|zahl }} % USt, zusammen {{ (g.einrichtung_eur * (1 + dienstleister_ust))|zahl(2) }} €{% endif %} an {{ erzeuger.name }}.</p>
 <button>Rechnung an den Erzeuger erstellen</button></form>
 <p class="klein">Die Mail dazu landet im Postausgang. Die Übersicht erinnert daran, sobald die Gruppe aktiv ist.</p>{% endif %}
-{% if selbst and rechnungen %}<h3 style="font-size:1rem;margin-top:16px">Frühere Rechnungen an die Abnehmer</h3><div class="tabelle"><table><tr><th>Nummer</th><th>Abnehmer</th><th>Zeitraum</th><th class="zahl">Brutto</th><th>Status</th></tr>
-{% for r in rechnungen %}<tr><td><a href="/verwaltung/rechnung/{{ r.id }}">{{ r.nummer }}</a></td><td>{{ namen.get(r.abnehmer_id, r.abnehmer_id) }}</td><td>{{ r.von.strftime("%d.%m.%y") }} – {{ r.bis.strftime("%d.%m.%y") }}</td><td class="zahl">{{ r.brutto|zahl(2) }} €</td><td>{{ status.rechnung(r) }}</td></tr>{% endfor %}</table></div>{% endif %}
 </div>
-{% if not selbst %}
-<div class="karte" id="abrechnung"><h2>Abrechnung</h2>
-<form method="post" action="/verwaltung/gruppe/{{ g.id }}/abrechnungslauf" class="zeile">
+
+<div class="karte" id="abrechnung"><h2>{{ "Servicegebühr" if nur_geb else "Abrechnung" }}</h2>
+{% if schenk and not schenkung_gebuehr %}<p class="hinweis">Schenkung: keine Rechnungen an die Abnehmer und keine Servicegebühr.</p>
+{% else %}<form method="post" action="/verwaltung/gruppe/{{ g.id }}/abrechnungslauf" class="zeile">
 <div><label>Von</label><input type="date" name="von" value="{{ vorschlag[0] }}" required></div>
 <div><label>Bis</label><input type="date" name="bis" value="{{ vorschlag[1] }}" required></div>
-<button>Rechnungen erstellen</button></form>
-<p class="klein">Vorschlag: nächster {{ "Monat" if g.rechnung_monatlich else "Jahreszeitraum" }} nach der letzten Rechnung. Abgerechnet wird die „Eigendeckung gemeinschaftlicher Erzeugung“ jedes Abnehmers aus den Energiedaten, zum Preis, der zu Beginn des Zeitraums gilt. Jede Rechnung landet als Mail im Postausgang.{% if g.gebuehr_ct_kwh > 0 %} Dazu entsteht die Servicegebühr von {{ dienstleister.firma }} an den Erzeuger ({{ g.gebuehr_ct_kwh|zahl(2) }} ct je geteilter kWh).{% endif %}</p>
+<button>{{ "Servicegebühr erstellen" if nur_geb else "Rechnungen erstellen" }}</button></form>
+{% if nur_geb %}<p class="klein">{% if schenk %}Schenkung: keine Rechnungen an die Abnehmer.{% else %}Der Erzeuger stellt seinen Abnehmern die Rechnungen selbst, die geteilten kWh je Abnehmer sieht er in seinem Bereich.{% endif %} Wir verrechnen ihm die Servicegebühr ({{ g.gebuehr_ct_kwh|zahl(2) }} ct je geteilter kWh) aus den Energiedaten. Die Mail dazu landet im Postausgang.</p>
+{% else %}<p class="klein">Vorschlag: nächster {{ "Monat" if g.rechnung_monatlich else "Jahreszeitraum" }} nach der letzten Rechnung. Abgerechnet wird die „Eigendeckung gemeinschaftlicher Erzeugung“ jedes Abnehmers aus den Energiedaten, zum Preis, der zu Beginn des Zeitraums gilt. Jede Rechnung landet als Mail im Postausgang.{% if g.gebuehr_ct_kwh > 0 %} Dazu entsteht die Servicegebühr von {{ dienstleister.firma }} an den Erzeuger ({{ g.gebuehr_ct_kwh|zahl(2) }} ct je geteilter kWh).{% endif %}</p>
 <details class="klein nicht-drucken"><summary>Alternativ: Summen als CSV hochladen</summary>
 <form method="post" action="/verwaltung/gruppe/{{ g.id }}/abrechnung" enctype="multipart/form-data" style="margin-top:8px">
-<p>CSV mit den Spalten <code>zaehlpunkt;von;bis;kwh</code>.</p><input type="file" name="report" accept=".csv" required> <button class="zweit">CSV abrechnen</button></form></details>
-<div class="tabelle" style="margin-top:14px"><table><tr><th>Nummer</th><th>Abnehmer</th><th>Zeitraum</th><th class="zahl">kWh</th><th class="zahl">Brutto</th><th>Status</th><th></th></tr>
+<p>CSV mit den Spalten <code>zaehlpunkt;von;bis;kwh</code>.</p><input type="file" name="report" accept=".csv" required> <button class="zweit">CSV abrechnen</button></form></details>{% endif %}
+{% endif %}
+{% if not nur_geb or rechnungen %}<div class="tabelle" style="margin-top:14px"><table><tr><th>Nummer</th><th>Abnehmer</th><th>Zeitraum</th><th class="zahl">kWh</th><th class="zahl">Brutto</th><th>Status</th><th></th></tr>
 {% for r in rechnungen %}{% if loop.index == 10 %}</table><details><summary class="klein" style="margin:8px 0">Ältere Rechnungen ({{ rechnungen|length - 9 }})</summary><table>{% endif %}<tr><td><a href="/verwaltung/rechnung/{{ r.id }}">{{ r.nummer }}</a></td><td>{{ namen.get(r.abnehmer_id, r.abnehmer_id) }}</td><td>{{ r.von.strftime("%d.%m.%y") }} – {{ r.bis.strftime("%d.%m.%y") }}</td><td class="zahl">{{ r.kwh|zahl(1) }}</td><td class="zahl">{{ r.brutto|zahl(2) }} €</td><td>{{ status.rechnung(r) }}</td>
 <td><form method="post" action="/verwaltung/rechnung/{{ r.id }}/bezahlt"><input type="hidden" name="zurueck" value="/verwaltung/gruppe/{{ g.id }}#abrechnung"><button class="zweit klein-knopf">{{ "Offen setzen" if r.bezahlt_am else "Bezahlt" }}</button></form></td></tr>
-{% else %}<tr><td colspan="7">Noch keine Rechnungen.</td></tr>{% endfor %}</table>{% if rechnungen|length >= 10 %}</details>{% endif %}</div>
+{% else %}<tr><td colspan="7">Noch keine Rechnungen.</td></tr>{% endfor %}</table>{% if rechnungen|length >= 10 %}</details>{% endif %}</div>{% endif %}
 {% set gebuehren = gebuehren|rejectattr("art", "equalto", "einrichtung")|list %}
 {% if gebuehren %}<h3 style="font-size:1rem;margin-top:16px">Servicegebühren an den Erzeuger</h3><div class="tabelle"><table><tr><th>Nummer</th><th>Zeitraum</th><th class="zahl">kWh</th><th class="zahl">Netto</th><th class="zahl">Brutto</th><th>Status</th><th></th></tr>
 {% for x in gebuehren %}<tr><td><a href="/verwaltung/gebuehr/{{ x.id }}">{{ x.nummer }}</a></td><td>{{ x.von.strftime("%d.%m.%y") }} – {{ x.bis.strftime("%d.%m.%y") }}</td><td class="zahl">{{ x.kwh|zahl(1) }}</td><td class="zahl">{{ x.netto|zahl(2) }} €</td><td class="zahl">{{ x.brutto|zahl(2) }} €</td><td>{{ status.rechnung(x) }}</td>
 <td><form method="post" action="/verwaltung/gebuehr/{{ x.id }}/bezahlt"><input type="hidden" name="zurueck" value="/verwaltung/gruppe/{{ g.id }}#abrechnung"><button class="zweit klein-knopf">{{ "Offen setzen" if x.bezahlt_am else "Bezahlt" }}</button></form></td></tr>{% endfor %}</table></div>{% endif %}
-</div>
-{% endif %}
 
 <div class="{{ '' if selbst else 'zwei' }}">
 {% if not selbst %}<div class="karte"><h2>Preisänderung ankündigen</h2>
@@ -89,11 +88,11 @@
 <form method="post" action="/verwaltung/gruppe/{{ g.id }}">
 <div class="zeile">
 <div><label>Status</label><select name="status">{% for s in stati %}<option value="{{ s.value }}" {{ "selected" if s == g.status }}>{{ status_text[s] }}</option>{% endfor %}</select></div>
-<div><label>Abrechnung</label><select name="modell" {{ "disabled" if unterschriften }}><option value="verwaltet" {{ "selected" if not selbst }}>Über uns: Auslesung, Monitoring, Rechnungen</option><option value="selbst" {{ "selected" if selbst }}>Nachbarn selbst, nur Einrichtung</option></select></div>
+<div><label>Rechnungen an die Abnehmer</label><select name="modell" {{ "disabled" if unterschriften }}><option value="verwaltet" {{ "selected" if not selbst }}>Über uns, im Namen des Erzeugers</option><option value="selbst" {{ "selected" if selbst }}>Stellt der Erzeuger selbst</option></select></div>
 <div><label>Preis ct/kWh netto</label><input type="number" step="0.01" name="preis_ct_kwh" value="{{ g.preis_ct_kwh }}"></div>
 <div><label>USt-Satz Erzeuger</label><select name="ust_satz"><option value="0" {{ "selected" if not g.ust_satz }}>0 % (Kleinunternehmer)</option><option value="0.2" {{ "selected" if g.ust_satz }}>20 %</option></select></div>
 <div><label>Einrichtungsgebühr € netto</label><input type="number" step="0.01" min="0" name="einrichtung_eur" value="{{ g.einrichtung_eur }}" {{ "disabled" if einrichtung }}></div>
-{% if not selbst %}<div><label>Servicegebühr FIX ct/kWh</label><input type="number" step="0.01" name="gebuehr_ct_kwh" value="{{ g.gebuehr_ct_kwh }}"></div>{% endif %}
+<div><label>Servicegebühr FIX ct/kWh</label><input type="number" step="0.01" name="gebuehr_ct_kwh" value="{{ g.gebuehr_ct_kwh }}"></div>
 </div>
 <label><input type="checkbox" name="rechnung_monatlich" value="true" {{ "checked" if g.rechnung_monatlich }}> {{ "Erzeuger rechnet monatlich ab (steht so im Vertrag)" if selbst else "Monatliche Rechnung" }}</label>
 <div class="zeile">

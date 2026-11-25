@@ -1,12 +1,13 @@
 """Rechnungen von FIX an den Erzeuger bzw. GEA-Betreiber.
 
 Zwei Arten:
-- Servicegebühr je geteilter kWh (GEA, und P2P mit Abrechnung über FIX). Grundlage ist die
-  geteilte Menge im Zeitraum, also die Summe der „Eigendeckung“ aller Abnehmer bzw. Wohnungen.
+- Servicegebühr je geteilter kWh (GEA und P2P). Grundlage ist die geteilte Menge im Zeitraum,
+  also die Summe der „Eigendeckung“ aller Abnehmer bzw. Wohnungen aus den EDA-Daten.
 - Einrichtungsgebühr, einmal je P2P-Vertrag: FIX vermittelt, setzt den Vertrag auf und meldet
   beim Netzbetreiber an.
 
-Bei einer P2P-Schenkung (Preis 0) verrechnet FIX nichts.
+Bei einer P2P-Schenkung (Preis 0) verrechnet FIX nur die Einrichtung, die Servicegebühr nur mit
+config.SCHENKUNG_SERVICEGEBUEHR.
 """
 from datetime import date
 
@@ -21,13 +22,20 @@ EINRICHTUNG_AB = (GruppenStatus.UNTERSCHRIEBEN, GruppenStatus.REGISTRIERT, Grupp
 
 
 def einmalig(g: Gruppe | None) -> bool:
-    """P2P ohne Abrechnung über FIX: FIX verrechnet nur die Einrichtung, die Nachbarn rechnen selbst ab."""
+    """P2P, bei dem der Erzeuger seinen Abnehmern selbst die Rechnung stellt. FIX liefert ihm die Zahlen
+    und verrechnet Einrichtung und Servicegebühr. (Name aus der ersten Fassung, als es dort nur die
+    Einrichtung gab.)"""
     return g is not None and g.art == Art.P2P and g.modell == Modell.SELBST
 
 
 def schenkung(g: Gruppe, tag: date | None = None) -> bool:
-    """P2P ohne Preis: der Strom ist geschenkt, FIX verrechnet nichts und es gibt keine Rechnungen."""
+    """P2P ohne Preis: der Strom ist geschenkt, es gibt keine Rechnungen an die Abnehmer."""
     return g.art == Art.P2P and abrechnung.preis_fuer(g, tag or date.today()) <= 0
+
+
+def nur_gebuehr(g: Gruppe, tag: date | None = None) -> bool:
+    """FIX stellt hier keine Rechnungen an Abnehmer oder Wohnungen, nur die eigene Servicegebühr."""
+    return g.modell == Modell.SELBST or schenkung(g, tag)
 
 
 def nummer(g: Gruppe, bis: date) -> str:
@@ -41,7 +49,7 @@ def einrichtung_nummer(g: Gruppe) -> str:
 def anlegen(s: Session, g: Gruppe, von: date, bis: date, kwh: float, datum: date | None = None) -> Gebuehr | None:
     """Gebührenrechnung für den Zeitraum. None, wenn keine Gebühr vereinbart ist, der Strom geschenkt ist
     oder es sie schon gibt."""
-    if g.gebuehr_ct_kwh <= 0 or kwh <= 0 or schenkung(g, von):
+    if g.gebuehr_ct_kwh <= 0 or kwh <= 0 or (schenkung(g, von) and not config.SCHENKUNG_SERVICEGEBUEHR):
         return None
     n = nummer(g, bis)
     if s.exec(select(Gebuehr).where(Gebuehr.nummer == n)).first():
@@ -63,9 +71,8 @@ def einrichtung(s: Session, g: Gruppe) -> Gebuehr | None:
 
 def einrichtung_anlegen(s: Session, g: Gruppe, datum: date | None = None) -> Gebuehr | None:
     """Einmalige Rechnung für das Aufsetzen des P2P-Vertrags. None, wenn kein Betrag festgelegt ist,
-    der Strom geschenkt ist, der Vertrag noch nicht unterschrieben ist oder es die Rechnung schon gibt."""
-    if g.art != Art.P2P or g.einrichtung_eur <= 0 or g.status not in EINRICHTUNG_AB or einrichtung(s, g) \
-            or schenkung(g, datum):
+    der Vertrag noch nicht unterschrieben ist oder es die Rechnung schon gibt. Auch bei einer Schenkung."""
+    if g.art != Art.P2P or g.einrichtung_eur <= 0 or g.status not in EINRICHTUNG_AB or einrichtung(s, g):
         return None
     datum = datum or date.today()
     netto = round(g.einrichtung_eur, 2)

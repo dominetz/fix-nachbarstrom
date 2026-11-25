@@ -7,15 +7,15 @@ Plattform für zwei Modelle:
 
 In beiden Modellen kann FIX je geteilter kWh eine Servicegebühr verrechnen (Rechnung von FIX PV GmbH an den Erzeuger bzw. Betreiber).
 
-**P2P-Gebühren:** Je Gruppe unter Einstellungen → „Abrechnung“, bis zur ersten Unterschrift änderbar (Vertrag, Vollmacht und Infoblatt richten sich danach):
+**P2P-Gebühren:** FIX verrechnet dem Erzeuger immer die Einrichtungsgebühr (einmal, nach der Unterschrift) und eine Servicegebühr je geteilter kWh aus den EDA-Daten. Je Gruppe unter Einstellungen → „Rechnungen an die Abnehmer“ wird nur gewählt, wer die Abnehmer abrechnet (bis zur ersten Unterschrift änderbar, Vertrag, Vollmacht und Infoblatt richten sich danach):
 
-| Abrechnung | Was FIX verrechnet |
+| Rechnungen an die Abnehmer | Was FIX verrechnet |
 |---|---|
-| Über uns (Auslesung, Monitoring, Rechnungen) | Einrichtungsgebühr einmal plus Servicegebühr je geteilter kWh. FIX rechnet im Namen des Erzeugers ab. |
-| Nachbarn selbst | Nur die Einrichtungsgebühr. Danach rechnen Erzeuger und Abnehmer selbst ab. |
-| Schenkung (Preis 0) | Nichts, egal welche Abrechnung. |
+| Über uns | Einrichtung plus Servicegebühr. FIX stellt die Rechnungen an die Abnehmer im Namen des Erzeugers. |
+| Stellt der Erzeuger selbst | Einrichtung plus Servicegebühr. Der Erzeuger sieht in seinem Bereich die geteilten kWh je Abnehmer und Monat. |
+| Schenkung (Preis 0) | Nur die Einrichtung, keine Rechnungen an die Abnehmer. Mit `NACHBARSTROM_SCHENKUNG_GEBUEHR=ja` auch die Servicegebühr. |
 
-Vorschläge für neue Gruppen in der Einstellungsdatei: `NACHBARSTROM_P2P_MODELL` (`verwaltet` = über uns, Standard, oder `selbst`), `NACHBARSTROM_EINRICHTUNG_EUR` (Euro netto, ohne Betrag bleibt der Knopf für die Rechnung gesperrt) und `NACHBARSTROM_GEBUEHR_CT_KWH` (Standard 1,0).
+Vorschläge für neue Gruppen in der Einstellungsdatei: `NACHBARSTROM_P2P_MODELL` (`verwaltet` = über uns, Standard, oder `selbst`), `NACHBARSTROM_EINRICHTUNG_EUR` (Euro netto, ohne Betrag bleibt der Knopf für die Rechnung gesperrt), `NACHBARSTROM_GEBUEHR_CT_KWH` (Standard 1,0) und `NACHBARSTROM_SCHENKUNG_GEBUEHR` (`ja` = Servicegebühr auch bei Schenkungen, Standard aus).
 
 FIX PV handelt als bevollmächtigter Dienstleister, nicht als Organisator.
 
@@ -156,7 +156,7 @@ pytest
 - PV-Ertrag 1.050 kWh je kWp und Jahr, Lastprofile vereinfacht. Durch echte Messwerte ersetzen.
 - Aufbau des EDA-Exports: gebaut nach dem bekannten Aufbau (eine Spalte je Zählpunkt und Messgröße) plus lange Tabellen. Mit dem ersten echten Export prüfen.
 - Servicegebühr und Einrichtungsgebühr: 20 % USt angenommen (FIX PV GmbH an Erzeuger/Betreiber). Mit dem Steuerberater prüfen.
-- P2P „Nachbarn selbst“: Wer nach dem Einrichten die EDA-Daten der Gemeinschaft bekommt und bei einer Kündigung abmeldet, ist offen. Vertrag und Vollmacht nennen weiter die An- und Abmeldung durch FIX. Rechtlich prüfen.
+- P2P „Erzeuger stellt die Rechnungen selbst“: FIX bleibt laut Vertrag und Vollmacht für An- und Abmeldung und die Messdaten zuständig und bekommt die EDA-Daten weiter. Ob die Servicegebühr in diesem Fall so im Vertrag mit dem Erzeuger stehen muss, rechtlich prüfen.
 - GEA, von FIX abgerechnet: Rechnung im Namen des Betreibers (Vollmacht). Rolle und Rechnungstext rechtlich prüfen.
 - Statische Aufteilung in der GEA: Anteil je Wohnung in %, Rest der Wohnung bleibt beim Lieferanten. Bei dynamischer Aufteilung kommen die Anteile aus dem Export.
 - Rechnungstext und Kleinunternehmer-Hinweis mit dem Steuerberater prüfen.

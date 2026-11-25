@@ -109,7 +109,7 @@ def anlegen(neu: bool = False) -> None:
             g = Gruppe(erwartete_kwh_jahr=round(sum(menge.values())), erzeuger_id=leute[e].id, status=status, zonelevel=zone, preis_ct_kwh=preis,
                        rechnung_monatlich=monatlich, marktpartner_id=f"PP90000{nr}", gebuehr_ct_kwh=1.0,
                        einrichtung_eur=config.EINRICHTUNG_EUR or TEST_EINRICHTUNG_EUR,
-                       # Gruppe 3 rechnet selbst ab, wir verrechnen dort nur die Einrichtung
+                       # Gruppe 3: der Erzeuger stellt die Rechnungen selbst, wir verrechnen Einrichtung und Servicegebühr
                        modell=Modell.SELBST if nr == 3 else Modell.VERWALTET,
                        gemeinschafts_id=f"AT{NB}0000000000000000000TEST{nr:04d}",
                        aktiv_seit=JAHR_VON if status == GruppenStatus.AKTIV else None,

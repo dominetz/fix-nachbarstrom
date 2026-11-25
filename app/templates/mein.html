@@ -46,11 +46,9 @@
 {% if not gea %}<p><a class="knopf zweit" href="/mein/{{ t.id }}/{{ token }}/infoblatt">Informationsblatt</a></p>{% endif %}</div>
 
 {% if ohne_rechnung %}<div class="karte"><h2>Abrechnung</h2>
-{% if preis_heute <= 0 %}<p>Der Strom ist geschenkt. Es gibt keine Rechnung.</p>
-{% elif erz %}<p>Sie stellen Ihren Abnehmern die Rechnung selbst, {{ "monatlich" if g.rechnung_monatlich else "jährlich" }} und kostenlos, auf Grundlage der Messdaten des Netzbetreibers. Ihre Abnehmer zahlen direkt an Sie.</p>
+{% if preis_heute <= 0 %}<p>Der Strom ist geschenkt. {{ "Ihre Abnehmer bekommen" if erz else "Sie bekommen" }} keine Rechnung.</p>
+{% elif erz %}<p>Sie stellen Ihren Abnehmern die Rechnung selbst, {{ "monatlich" if g.rechnung_monatlich else "jährlich" }} und kostenlos, auf Grundlage der Messdaten des Netzbetreibers. Die geteilten kWh je Abnehmer finden Sie unten. Ihre Abnehmer zahlen direkt an Sie.</p>
 {% else %}<p>Ihre Rechnung kommt direkt vom Erzeuger, {{ "monatlich" if g.rechnung_monatlich else "jährlich" }} und kostenlos. Sie zahlen direkt an den Erzeuger.</p>{% endif %}
-{% if erz and gebuehren %}<h3 style="font-size:1rem">Unsere Rechnung an Sie</h3><table><tr><th>Nummer</th><th class="zahl">Betrag</th><th>Fällig</th><th>Status</th></tr>
-{% for x in gebuehren %}<tr><td style="white-space:nowrap"><a href="/mein/{{ t.id }}/{{ token }}/gebuehr/{{ x.id }}">{{ x.nummer }}</a></td><td class="zahl">{{ x.brutto|zahl(2) }} €</td><td>{{ x.faellig.strftime("%d.%m.%Y") }}</td><td>{{ status.rechnung(x) }}</td></tr>{% endfor %}</table>{% endif %}
 </div>
 {% else %}
 <div class="karte"><h2>{{ "Einnahmen je Jahr" if erz else "Kosten je Jahr" }}</h2>
@@ -65,7 +63,11 @@
 {% for r in rechnungen %}{% if loop.index == 10 %}</table><details><summary class="klein" style="margin:8px 0">Ältere Rechnungen ({{ rechnungen|length - 9 }})</summary><table>{% endif %}<tr><td><a href="/mein/{{ t.id }}/{{ token }}/rechnung/{{ r.id }}">{{ r.nummer }}</a></td>{% if erz %}<td>{% for p in partner %}{% if p.id == r.abnehmer_id %}{{ p.vorname }}{% endif %}{% endfor %}</td>{% endif %}<td>{{ r.von.strftime("%d.%m.%Y") }} – {{ r.bis.strftime("%d.%m.%Y") }}</td><td class="zahl">{{ r.kwh|zahl(1) }}</td><td class="zahl">{{ r.brutto|zahl(2) }} €</td><td>{{ r.faellig.strftime("%d.%m.%Y") }}</td><td>{{ status.rechnung(r) }}</td></tr>
 {% else %}<tr><td colspan="7">Noch keine Rechnungen.</td></tr>{% endfor %}
 </table>{% if rechnungen|length >= 10 %}</details>{% endif %}</div>{% endif %}
-{% if erz and not selbst and gebuehren %}<div class="karte tabelle"><h2>Unsere Rechnungen an Sie</h2>
+{% if erz and selbst and not schenkung and a and a.je_monat %}<div class="karte tabelle"><h2>Zahlen für Ihre Rechnungen</h2>
+<p class="klein">Geteilte kWh je Abnehmer und Monat (Eigendeckung laut EDA-Daten des Netzbetreibers, Daten bis {{ a.bis.strftime("%d.%m.%Y") }}). Rechnung je Abnehmer: kWh × {{ preis_heute|zahl(2) }} ct netto.</p>
+<table><tr><th>Monat</th>{% for p in partner[1:] %}<th class="zahl">{{ p.vorname or p.name }}</th>{% endfor %}</tr>
+{% for monat, werte in a.je_monat %}<tr><td>{{ monat }}</td>{% for w in werte %}<td class="zahl">{{ w|zahl(1) }}</td>{% endfor %}</tr>{% endfor %}</table></div>{% endif %}
+{% if erz and gebuehren %}<div class="karte tabelle"><h2>Unsere Rechnungen an Sie</h2>
 <table><tr><th>Nummer</th><th>Leistung</th><th class="zahl">Betrag</th><th>Fällig</th><th>Status</th></tr>
 {% for x in gebuehren %}<tr><td style="white-space:nowrap"><a href="/mein/{{ t.id }}/{{ token }}/gebuehr/{{ x.id }}">{{ x.nummer }}</a></td><td>{% if x.art == "einrichtung" %}Einrichtung{% else %}Servicegebühr {{ x.von.strftime("%d.%m.%Y") }} – {{ x.bis.strftime("%d.%m.%Y") }}{% endif %}</td><td class="zahl">{{ x.brutto|zahl(2) }} €</td><td>{{ x.faellig.strftime("%d.%m.%Y") }}</td><td>{{ status.rechnung(x) }}</td></tr>{% endfor %}</table></div>{% endif %}
 {% endif %}
