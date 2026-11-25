@@ -916,9 +916,9 @@ def test_sicherheits_kopfzeilen_und_rechtsseiten(client, monkeypatch):
     assert start.headers["x-frame-options"] == "DENY"
     assert start.headers["referrer-policy"] == "same-origin"
     assert "x-robots-tag" not in start.headers
-    assert "googleapis" not in start.text and "/static/schrift/rubik-latin-400-normal.woff2" in start.text
+    assert "googleapis" not in start.text and "/static/schrift/open-sans-latin-400-normal.woff2" in start.text
     assert 'href="/impressum"' in start.text and 'href="/datenschutz"' in start.text
-    assert c.get("/static/schrift/rubik-latin-700-normal.woff2").status_code == 200
+    assert c.get("/static/schrift/open-sans-latin-700-normal.woff2").status_code == 200
     assert "noindex" in c.get("/verwaltung").headers["x-robots-tag"]
     assert "noindex" in c.get("/mein/irgendwas").headers["x-robots-tag"]
     assert c.get("/docs").status_code == 404 and c.get("/openapi.json").status_code == 404
