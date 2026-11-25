@@ -1,5 +1,6 @@
 {% extends "basis.html" %}
 {% block markenlink %}/verwaltung{% endblock %}
+{% block breite %}breit{% endblock %}
 {% block nav %}{% set p = request.url.path %}<nav>
 <a href="/verwaltung" class="{{ 'aktiv' if p == '/verwaltung' }}">Übersicht</a>
 <a href="/verwaltung/anfragen" class="{{ 'aktiv' if p.startswith('/verwaltung/anfrage') }}">Anfragen</a>
@@ -11,4 +12,9 @@
 <a href="/verwaltung/rechnungen" class="{{ 'aktiv' if p.startswith('/verwaltung/rechnung') or p.startswith('/verwaltung/gebuehr') }}">Rechnungen</a>
 <a href="/verwaltung/erinnerungen" class="{{ 'aktiv' if p.startswith('/verwaltung/erinnerungen') }}">Erinnerungen</a>
 <a href="/verwaltung/postausgang" class="{{ 'aktiv' if p.startswith('/verwaltung/postausgang') }}">Postausgang</a>
-</nav>{% endblock %}
+</nav>
+<script>/* Auf schmalen Bildschirmen scrollt die Leiste: aktiven Punkt zeigen, Rand ausblenden, solange mehr da ist */
+(function(){var n=document.querySelector("header nav"),a=n&&n.querySelector("a.aktiv");if(!n)return;
+function rand(){n.classList.toggle("rollt",n.scrollWidth>n.clientWidth+1&&n.scrollLeft+n.clientWidth<n.scrollWidth-2)}
+if(a&&n.scrollWidth>n.clientWidth)n.scrollLeft+=a.getBoundingClientRect().left-n.getBoundingClientRect().left-(n.clientWidth-a.offsetWidth)/2;
+rand();n.addEventListener("scroll",rand,{passive:true});addEventListener("resize",rand)})();</script>{% endblock %}

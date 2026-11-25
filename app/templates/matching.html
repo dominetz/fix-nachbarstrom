@@ -1,15 +1,15 @@
 {% extends "verwaltung_basis.html" %}
 {% block inhalt %}
 <h1>Matching</h1>
-<p class="klein">Vorschläge für alle freien Erzeuger. Gerechnet mit Standardprofilen je Viertelstunde (Sommer, Übergang, Winter). Wer sich über einen Einladungslink angemeldet hat, wird zuerst mit dem Einladenden zusammengebracht, in beide Richtungen. Freitext-Wünsche stehen dabei, die prüfst du selbst.</p>
+<p class="unter">Vorschläge für alle freien Erzeuger. Gerechnet mit Standardprofilen je Viertelstunde (Sommer, Übergang, Winter). Wer sich über einen Einladungslink angemeldet hat, wird zuerst mit dem Einladenden zusammengebracht, in beide Richtungen. Freitext-Wünsche stehen dabei, die prüfst du selbst.</p>
 {% for v in vorschlaege %}
-<div class="karte">
-<b>{{ v.erzeuger.name }}</b>{% if v.erzeuger.wunschpartner %} <span class="klein">(Wunsch: {{ v.erzeuger.wunschpartner }})</span>{% endif %}, {{ v.erzeuger.ort }}, {{ v.erzeuger.anlage_kwp|zahl(1) }} kWp. Zone {{ v.zonelevel }}.
-Geteilt ca. <b>{{ v.kwh_gesamt|zahl }} kWh/Jahr</b> ({{ (v.auslastung*100)|zahl }} % des Überschusses).
-<table><tr><th>Abnehmer</th><th>Ort</th><th>Profil</th><th>kWh/Jahr geteilt</th></tr>
-{% for a in v.abnehmer %}<tr><td>{{ a.name }}{% if a.einladung_von == v.erzeuger.id or v.erzeuger.einladung_von == a.id %} <span class="badge ok">eingeladen</span>{% endif %}{% if a.wunschpartner %}<br><span class="klein">Wunsch: {{ a.wunschpartner }}</span>{% endif %}</td><td>{{ a.ort }}</td><td>{{ a.profiltyp.value }}</td><td>{{ v.kwh_je_abnehmer[a.id]|zahl }}</td></tr>{% endfor %}</table>
-<form method="post" action="/verwaltung/gruppe"><input type="hidden" name="erzeuger_id" value="{{ v.erzeuger.id }}"><input type="hidden" name="abnehmer_ids" value="{{ v.abnehmer|map(attribute='id')|join(',') }}"><button>Gruppe anlegen</button></form>
+<div class="karte vorschlag">
+<p><b>{{ v.erzeuger.name }}</b>{% if v.erzeuger.wunschpartner %} <span class="klein">(Wunsch: {{ v.erzeuger.wunschpartner }})</span>{% endif %}, {{ v.erzeuger.ort }}, {{ v.erzeuger.anlage_kwp|zahl(1) }} kWp. Zone {{ v.zonelevel }}.
+Geteilt ca. <b>{{ v.kwh_gesamt|zahl }} kWh/Jahr</b> ({{ (v.auslastung*100)|zahl }} % des Überschusses).</p>
+<div class="tabelle"><table class="stapel"><tr class="kopf"><th>Abnehmer</th><th>Ort</th><th>Profil</th><th class="zahl">kWh/Jahr geteilt</th></tr>
+{% for a in v.abnehmer %}<tr><td>{{ a.name }}{% if a.einladung_von == v.erzeuger.id or v.erzeuger.einladung_von == a.id %} <span class="badge ok">eingeladen</span>{% endif %}{% if a.wunschpartner %}<br><span class="klein">Wunsch: {{ a.wunschpartner }}</span>{% endif %}</td><td>{{ a.ort }}</td><td>{{ a.profiltyp.value }}</td><td class="zahl m-betrag" data-nach="kWh/Jahr">{{ v.kwh_je_abnehmer[a.id]|zahl }}</td></tr>{% endfor %}</table></div>
+<form method="post" action="/verwaltung/gruppe" class="abstand"><input type="hidden" name="erzeuger_id" value="{{ v.erzeuger.id }}"><input type="hidden" name="abnehmer_ids" value="{{ v.abnehmer|map(attribute='id')|join(',') }}"><button>Gruppe anlegen</button></form>
 </div>
-{% else %}<p>Keine Vorschläge.</p>{% endfor %}
-{% if ohne %}<h2>Ohne passenden Partner (Warteliste)</h2><ul>{% for e in ohne %}<li>{{ e.name }}, {{ e.ort }}</li>{% endfor %}</ul>{% endif %}
+{% else %}<p class="leer">Keine Vorschläge.</p>{% endfor %}
+{% if ohne %}<div class="karte"><h2>Ohne passenden Partner (Warteliste)</h2><ul class="aufgaben">{% for e in ohne %}<li>{{ e.name }}, {{ e.ort }}</li>{% endfor %}</ul></div>{% endif %}
 {% endblock %}

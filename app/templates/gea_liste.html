@@ -1,12 +1,12 @@
 {% extends "verwaltung_basis.html" %}
 {% import "_status.html" as status %}
 {% block inhalt %}
-<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap"><h1>Gemeinschaftliche Erzeugungsanlagen</h1><a class="knopf" href="/verwaltung/gea/neu">Neue GEA anlegen</a></div>
+<div class="seitenkopf"><h1>Gemeinschaftliche Erzeugungsanlagen</h1><a class="knopf" href="/verwaltung/gea/neu">Neue GEA anlegen</a></div>
 <p class="unter">PV-Anlage im Mehrparteienhaus, Strom für die Wohnungen. Der Betreiber registriert die GEA selbst über ebUtilities und lädt jeden Monat den EDA-Export hoch, oder du lädst ihn hier hoch. Bei „FIX rechnet ab“ entstehen daraus die Rechnungen an die Wohnungen.</p>
-<div class="karte tabelle"><table><tr><th>GEA</th><th>Betreiber</th><th>Status</th><th>Modell</th><th class="zahl">Wohnungen</th><th class="zahl">Im Haus genutzt (12 Mon.)</th><th class="zahl">Gebühr</th><th>Daten bis</th></tr>
-{% for g, b, n, a in zeilen %}<tr><td><a href="/verwaltung/gea/{{ g.id }}"><b>{{ g.titel }}</b></a></td><td>{{ b.name }}</td><td>{{ status.gea(g.status) }}</td><td>{{ "FIX rechnet ab" if g.modell.value == "verwaltet" else "Betreiber rechnet selbst ab" }}</td><td class="zahl">{{ n }}</td>
+<div class="karte"><div class="tabelle"><table class="stapel"><tr class="kopf"><th>GEA</th><th>Betreiber</th><th>Status</th><th>Modell</th><th class="zahl">Wohnungen</th><th class="zahl">Im Haus genutzt (12 Mon.)</th><th class="zahl">Gebühr</th><th>Daten bis</th></tr>
+{% for g, b, n, a in zeilen %}<tr><td><a href="/verwaltung/gea/{{ g.id }}"><b>{{ g.titel }}</b></a></td><td>{{ b.name }}</td><td class="m-status">{{ status.gea(g.status) }}</td><td>{{ "FIX rechnet ab" if g.modell.value == "verwaltet" else "Betreiber rechnet selbst ab" }}</td><td class="zahl" data-nach="Wohnungen">{{ n }}</td>
 <td class="zahl">{% if a %}{{ a.genutzt|zahl }} kWh<br><span class="klein">{{ (a.genutzt / a.erzeugung * 100 if a.erzeugung else 0)|zahl }} % der Erzeugung</span>{% else %}–{% endif %}</td>
-<td class="zahl">{{ g.gebuehr_ct_kwh|zahl(2) }} ct/kWh</td><td>{{ a.bis.strftime("%d.%m.%Y") if a else "noch keine" }}</td></tr>
-{% else %}<tr><td colspan="8">Noch keine GEA. <a href="/verwaltung/gea/neu">Neue GEA anlegen</a>, am einfachsten direkt aus dem EDA-Export.</td></tr>{% endfor %}
-</table></div>
+<td class="zahl">{{ g.gebuehr_ct_kwh|zahl(2) }} ct/kWh</td><td data-vor="Daten bis">{{ a.bis.strftime("%d.%m.%Y") if a else "noch keine" }}</td></tr>
+{% else %}<tr><td colspan="8" class="leer">Noch keine GEA. <a href="/verwaltung/gea/neu">Neue GEA anlegen</a>, am einfachsten direkt aus dem EDA-Export.</td></tr>{% endfor %}
+</table></div></div>
 {% endblock %}

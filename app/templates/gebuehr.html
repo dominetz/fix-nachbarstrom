@@ -1,5 +1,5 @@
 {% extends "verwaltung_basis.html" %}
 {% block inhalt %}
-<p class="klein nicht-drucken">Zum Speichern als PDF: Drucken → „Als PDF speichern“.</p>
-{% include "_gebuehr_inhalt.html" %}
+<div class="belegleiste nicht-drucken"><p class="klein">Zum Speichern als PDF: Drucken → „Als PDF speichern“.</p></div>
+<article class="beleg">{% include "_gebuehr_inhalt.html" %}</article>
 {% endblock %}

@@ -14,7 +14,7 @@
 {% else %}<div class="hinweis"><b>{{ e.datei }}</b> übernommen: {{ e.von.strftime("%d.%m.%Y") }} bis {{ e.bis.strftime("%d.%m.%Y") }}, {{ e.zaehlpunkte }} Zählpunkte.{% if e.neu %} Neu dabei: {{ e.neu|join(", ") }}.{% endif %}</div>{% endif %}
 {% endfor %}{% endif %}
 
-{% if aufgaben %}<div class="karte" style="border-color:#f0d9a0;background:var(--gelb-hell)"><h2>Zu erledigen</h2><ul class="aufgaben">
+{% if aufgaben %}<div class="karte aufgabe"><h2>Zu erledigen</h2><ul class="aufgaben">
 {% for text, link in aufgaben %}<li><span>{{ text }}</span>{% if link %}<a class="knopf klein-knopf" href="{{ link }}">Jetzt erledigen</a>{% endif %}</li>{% endfor %}</ul></div>{% endif %}
 
 <div class="karte"><h2>Stand</h2>
@@ -27,17 +27,19 @@
 <p class="klein">Im EDA-Portal unter den Energiedaten Ihrer Gemeinschaft den Export als Excel herunterladen und hier hochladen. Ein Monat, der schon da ist, wird ersetzt.</p></div>
 
 {% if a %}
-<div class="raster">
+<div class="blick">
+<div class="raster kennzahlen">
 <div class="kpi"><div class="wert">{{ a.erzeugung|zahl }} <small>kWh</small></div><div class="label">{{ "erzeugt" if a.aus_anlage else "erzeugt (aus den Anteilen berechnet)" }}, {{ a.monate|length }} {{ "Monat" if a.monate|length == 1 else "Monate" }}</div></div>
 <div class="kpi"><div class="wert">{{ a.genutzt|zahl }} <small>kWh</small></div><div class="label">im Haus genutzt · {{ (a.genutzt / a.erzeugung * 100 if a.erzeugung else 0)|zahl }} %</div></div>
 <div class="kpi"><div class="wert">{{ (a.genutzt / a.verbrauch * 100 if a.verbrauch else 0)|zahl }} <small>%</small></div><div class="label">des Verbrauchs der Wohnungen gedeckt</div></div>
 {% if a.preis > 0 %}<div class="kpi"><div class="wert">{{ (a.genutzt * a.preis / 100)|zahl(2) }} <small>€</small></div><div class="label">Wert bei {{ a.preis|zahl(2) }} ct/kWh netto (berechnet)</div></div>{% endif %}
 </div>
 <div class="karte"><h2>Je Monat</h2>{{ a.diagramm|safe }}<p class="klein">Werte aus den Messdaten des Netzbetreibers (EDA). Was im Haus nicht gebraucht wird, geht wie bisher ins Netz.</p></div>
-<div class="karte tabelle"><h2>Je Wohnung (kWh)</h2>
-<table><tr><th>Wohnung</th>{% for b in a.beschriftung %}<th class="zahl">{{ b }}</th>{% endfor %}<th class="zahl">Summe</th><th class="zahl">Anteil am Verbrauch</th>{% if a.preis > 0 %}<th class="zahl">Wert</th>{% endif %}</tr>
+</div>
+<div class="karte"><h2>Je Wohnung (kWh)</h2>
+<div class="tabelle"><table class="matrix"><tr><th>Wohnung</th>{% for b in a.beschriftung %}<th class="zahl">{{ b }}</th>{% endfor %}<th class="zahl">Summe</th><th class="zahl">Anteil am Verbrauch</th>{% if a.preis > 0 %}<th class="zahl">Wert</th>{% endif %}</tr>
 {% for z in a.zeilen %}<tr><td>{{ z.t.name }}</td>{% for w in z.monate %}<td class="zahl">{{ w|zahl }}</td>{% endfor %}<td class="zahl"><b>{{ z.summe.eigendeckung|zahl }}</b></td><td class="zahl">{{ z.quote|zahl }} %</td>{% if a.preis > 0 %}<td class="zahl">{{ z.betrag|zahl(2) }} €</td>{% endif %}</tr>{% endfor %}
-</table></div>
+</table></div></div>
 <div class="karte"><h2>Abrechnungsgrundlage</h2>
 <p>Alles für Ihre Abrechnung an die Wohnungen als Excel: je Wohnung Verbrauch, zugeteilte Menge, genutzte Menge und Betrag.</p>
 <form method="get" action="/mein/{{ t.id }}/{{ token }}/grundlage" class="zeile">
@@ -47,15 +49,15 @@
 {% if verwaltet %}<p class="klein">Die Rechnungen an die Wohnungen erstellt {{ dienstleister.firma }} in Ihrem Namen.</p>{% endif %}</div>
 {% endif %}
 
-{% if rechnungen %}<div class="karte tabelle"><h2>Rechnungen an die Wohnungen</h2>
-<table><tr><th>Nummer</th><th>Wohnung</th><th>Zeitraum</th><th class="zahl">kWh</th><th class="zahl">Betrag</th><th>Status</th></tr>
-{% for r in rechnungen[:24] %}<tr><td><a href="/mein/{{ t.id }}/{{ token }}/rechnung/{{ r.id }}">{{ r.nummer }}</a></td><td>{% for p in partner %}{% if p.id == r.abnehmer_id %}{{ p.name }}{% endif %}{% endfor %}</td><td>{{ r.von.strftime("%d.%m.%Y") }} – {{ r.bis.strftime("%d.%m.%Y") }}</td><td class="zahl">{{ r.kwh|zahl(1) }}</td><td class="zahl">{{ r.brutto|zahl(2) }} €</td><td>{{ status.rechnung(r) }}</td></tr>{% endfor %}
-</table></div>{% endif %}
+{% if rechnungen %}{% set liste = rechnungen[:24] %}<div class="karte"><h2>Rechnungen an die Wohnungen</h2>
+<div class="tabelle"><table class="stapel"><tr class="kopf"><th>Nummer</th><th>Wohnung</th><th>Zeitraum</th><th class="zahl">kWh</th><th class="zahl">Betrag</th><th>Status</th></tr>
+{% for r in liste %}{% if loop.index == 9 %}</table><details class="mehr"><summary>Ältere Rechnungen ({{ liste|length - 8 }})</summary><table class="stapel">{% endif %}<tr><td class="nw"><a href="/mein/{{ t.id }}/{{ token }}/rechnung/{{ r.id }}">{{ r.nummer }}</a></td><td>{% for p in partner %}{% if p.id == r.abnehmer_id %}{{ p.name }}{% endif %}{% endfor %}</td><td class="nw">{{ r.von.strftime("%d.%m.%Y") }} – {{ r.bis.strftime("%d.%m.%Y") }}</td><td class="zahl" data-nach="kWh">{{ r.kwh|zahl(1) }}</td><td class="zahl m-betrag">{{ r.brutto|zahl(2) }} €</td><td class="m-status">{{ status.rechnung(r) }}</td></tr>{% endfor %}
+</table>{% if liste|length >= 9 %}</details>{% endif %}</div></div>{% endif %}
 
-{% if gebuehren %}<div class="karte tabelle"><h2>Servicegebühr von {{ dienstleister.firma }}</h2>
-<table><tr><th>Nummer</th><th>Zeitraum</th><th class="zahl">kWh</th><th class="zahl">Betrag</th><th>Fällig</th><th>Status</th></tr>
-{% for x in gebuehren %}<tr><td><a href="/mein/{{ t.id }}/{{ token }}/gebuehr/{{ x.id }}">{{ x.nummer }}</a></td><td>{{ x.von.strftime("%d.%m.%Y") }} – {{ x.bis.strftime("%d.%m.%Y") }}</td><td class="zahl">{{ x.kwh|zahl(1) }}</td><td class="zahl">{{ x.brutto|zahl(2) }} €</td><td>{{ x.faellig.strftime("%d.%m.%Y") }}</td><td>{{ status.rechnung(x) }}</td></tr>{% endfor %}
-</table></div>{% endif %}
+{% if gebuehren %}<div class="karte"><h2>Servicegebühr von {{ dienstleister.firma }}</h2>
+<div class="tabelle"><table class="stapel"><tr class="kopf"><th>Nummer</th><th>Zeitraum</th><th class="zahl">kWh</th><th class="zahl">Betrag</th><th>Fällig</th><th>Status</th></tr>
+{% for x in gebuehren %}{% if loop.index == 7 %}</table><details class="mehr"><summary>Ältere Rechnungen ({{ gebuehren|length - 6 }})</summary><table class="stapel">{% endif %}<tr><td class="nw"><a href="/mein/{{ t.id }}/{{ token }}/gebuehr/{{ x.id }}">{{ x.nummer }}</a></td><td class="nw">{{ x.von.strftime("%d.%m.%Y") }} – {{ x.bis.strftime("%d.%m.%Y") }}</td><td class="zahl" data-nach="kWh">{{ x.kwh|zahl(1) }}</td><td class="zahl m-betrag">{{ x.brutto|zahl(2) }} €</td><td class="nw" data-vor="fällig">{{ x.faellig.strftime("%d.%m.%Y") }}</td><td class="m-status">{{ status.rechnung(x) }}</td></tr>{% endfor %}
+</table>{% if gebuehren|length >= 7 %}</details>{% endif %}</div></div>{% endif %}
 
 {% if verwaltet %}<div class="karte"><h2>Konto für Zahlungen</h2>
 <p class="klein">Die Wohnungen überweisen direkt auf dieses Konto. Die IBAN steht mit QR-Code auf jeder Rechnung.</p>

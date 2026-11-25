@@ -1,23 +1,23 @@
 {% extends "verwaltung_basis.html" %}
 {% block inhalt %}
-<p class="klein"><a href="/verwaltung/energiedaten">← Energiedaten</a></p>
+<p class="zurueck"><a href="/verwaltung/energiedaten">← Energiedaten</a></p>
 <h1>{{ u.dateiname }}</h1>
 <p class="unter">{{ imp.aufbau }} · {{ imp.zaehlpunkte|length }} Zählpunkte · {{ imp.von.strftime("%d.%m.%Y %H:%M") }} – {{ imp.bis.strftime("%d.%m.%Y %H:%M") }}{% if imp.intervall %} · {{ imp.intervall }}-Minuten-Werte{% endif %}{% if imp.gemeinschafts_id %} · Gemeinschafts-ID {{ imp.gemeinschafts_id }}{% endif %}</p>
 <form method="post">
 {% if imp.unbekannt %}
 <div class="karte"><h2>Diese Spalten kennt die Plattform noch nicht</h2>
 <p class="klein">Bitte einmal zuordnen. Die Antwort gilt ab jetzt für alle Exporte mit derselben Spalte.</p>
-<table><tr><th>Spalte im Export</th><th>Beispielwerte</th><th>Bedeutung</th></tr>
+<div class="tabelle"><table><tr><th>Spalte im Export</th><th>Beispielwerte</th><th>Bedeutung</th></tr>
 {% for titel, beispiele in imp.unbekannt.items() %}<tr><td><b>{{ titel }}</b></td><td class="klein">{{ beispiele|join(" · ") }}</td>
 <td><select name="feld_{{ loop.index0 }}" required><option value="">bitte wählen</option>{% for wert, text in felder %}<option value="{{ wert }}">{{ text }}</option>{% endfor %}</select></td></tr>{% endfor %}
-</table></div>
+</table></div></div>
 {% endif %}
 {% if bekannt %}<div class="karte"><h2>Schon erkannt</h2><ul>{% for text, f in bekannt %}<li>{{ text }}</li>{% endfor %}</ul></div>{% endif %}
 {% if u.aktion != "gea_neu" %}
 <div class="karte"><h2>Gemeinschaft</h2>
 <div class="zeile"><div><select name="ziel"><option value="0">automatisch erkennen</option>{% for g in gruppen %}<option value="{{ g.id }}" {{ "selected" if g.id == u.ziel_gruppe_id }}>{{ g.titel }}</option>{% endfor %}</select></div></div>
 <p class="klein">Gehört die Datei zu keiner bestehenden Gemeinschaft, lege daraus eine neue GEA an.</p>
-<p><button>Importieren</button> <button class="zweit" name="neue_gea" value="1">Als neue GEA anlegen</button></p></div>
+<p class="werkzeuge"><button>Importieren</button> <button class="zweit" name="neue_gea" value="1">Als neue GEA anlegen</button></p></div>
 {% else %}<p><button>Speichern und GEA anlegen</button></p>{% endif %}
 </form>
 {% endblock %}
