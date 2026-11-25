@@ -16,7 +16,7 @@ ADMIN_PASSWORT = os.environ.get("NACHBARSTROM_ADMIN_PASSWORD", "")  # leer = Ver
 ADMIN_PASSWORT_HASH = os.environ.get("NACHBARSTROM_ADMIN_PASSWORD_HASH", "")
 BASIS_URL = os.environ.get("NACHBARSTROM_BASE_URL", "http://localhost:8000")
 
-MARKE = os.environ.get("NACHBARSTROM_MARKE", "Fix Nachbarstrom")
+MARKE = os.environ.get("NACHBARSTROM_MARKE", "FIX Nachbarstrom")
 DIENSTLEISTER = {
     "firma": os.environ.get("NACHBARSTROM_FIRMA", "FIX PV GmbH"),
     "adresse": os.environ.get("NACHBARSTROM_FIRMA_ADRESSE", "[Adresse eintragen]"),
