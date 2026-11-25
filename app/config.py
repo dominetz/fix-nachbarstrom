@@ -34,8 +34,10 @@ DIENSTLEISTER = {
 RECHTSTEXTE_GEPRUEFT = os.environ.get("NACHBARSTROM_RECHTSTEXTE_GEPRUEFT", "") == "ja"
 # Umsatzsteuer auf die Servicegebühr von FIX (GmbH, Regelbesteuerung angenommen, mit Steuerberater klären)
 DIENSTLEISTER_UST = float(os.environ.get("NACHBARSTROM_FIRMA_UST", "0.20"))
-# Vorschlag für neue Gruppen und GEAs, in jeder Gruppe einzeln änderbar
+# Servicegebühr je kWh, Vorschlag für neue GEAs, in jeder Gemeinschaft einzeln änderbar
 GEBUEHR_STANDARD_CT_KWH = float(os.environ.get("NACHBARSTROM_GEBUEHR_CT_KWH", "1.0"))
+# Servicegebühr je geteilter kWh, Vorschlag für neue P2P-Gruppen (Vorgabe vom 25.11.2026: 1,5 ct)
+P2P_GEBUEHR_CT_KWH = float(os.environ.get("NACHBARSTROM_P2P_GEBUEHR_CT_KWH", "1.5"))
 # P2P: FIX verrechnet dem Erzeuger einmal die Einrichtung und laufend die Servicegebühr je geteilter
 # kWh (die Daten kommen über das EDA-Portal). Je Gruppe wählbar ist nur, wer die Rechnungen an die
 # Abnehmer stellt, hier der Vorschlag für neue Gruppen:
@@ -44,9 +46,9 @@ P2P_MODELL = "selbst" if os.environ.get("NACHBARSTROM_P2P_MODELL", "").strip().l
 # Schenkung (Preis 0): keine Rechnungen an die Abnehmer, FIX verrechnet nur die Einrichtung.
 # "ja" = auch die Servicegebühr je kWh.
 SCHENKUNG_SERVICEGEBUEHR = os.environ.get("NACHBARSTROM_SCHENKUNG_GEBUEHR", "").strip().lower() == "ja"
-# Einmalige Einrichtungsgebühr je P2P-Vertrag in Euro netto, Vorschlag für neue Gruppen.
-# 0 = noch nicht festgelegt, dann bleibt der Knopf für die Rechnung gesperrt.
-EINRICHTUNG_EUR = float(os.environ.get("NACHBARSTROM_EINRICHTUNG_EUR", "0"))
+# Einmalige Einrichtungsgebühr je P2P-Vertrag in Euro netto, Vorschlag für neue Gruppen
+# (Vorgabe vom 25.11.2026: 150 €). Bei 0 bleibt der Knopf für die Rechnung gesperrt.
+EINRICHTUNG_EUR = float(os.environ.get("NACHBARSTROM_EINRICHTUNG_EUR", "150"))
 
 # Frist für die Zustimmung im Netzportal. Koordinationsstelle: 30 Tage.
 # Laut Handbuch von Vorarlberg Netz 7 Tage, dort noch bestätigen lassen.

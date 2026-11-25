@@ -15,7 +15,7 @@ In beiden Modellen kann FIX je geteilter kWh eine Servicegebühr verrechnen (Rec
 | Stellt der Erzeuger selbst | Einrichtung plus Servicegebühr. Der Erzeuger sieht in seinem Bereich die geteilten kWh je Abnehmer und Monat. |
 | Schenkung (Preis 0) | Nur die Einrichtung, keine Rechnungen an die Abnehmer. Mit `NACHBARSTROM_SCHENKUNG_GEBUEHR=ja` auch die Servicegebühr. |
 
-Vorschläge für neue Gruppen in der Einstellungsdatei: `NACHBARSTROM_P2P_MODELL` (`verwaltet` = über uns, Standard, oder `selbst`), `NACHBARSTROM_EINRICHTUNG_EUR` (Euro netto, ohne Betrag bleibt der Knopf für die Rechnung gesperrt), `NACHBARSTROM_GEBUEHR_CT_KWH` (Standard 1,0) und `NACHBARSTROM_SCHENKUNG_GEBUEHR` (`ja` = Servicegebühr auch bei Schenkungen, Standard aus).
+Vorschläge für neue Gruppen in der Einstellungsdatei: `NACHBARSTROM_P2P_MODELL` (`verwaltet` = über uns, Standard, oder `selbst`), `NACHBARSTROM_EINRICHTUNG_EUR` (Euro netto, Standard 150), `NACHBARSTROM_P2P_GEBUEHR_CT_KWH` (Standard 1,5) und für GEAs `NACHBARSTROM_GEBUEHR_CT_KWH` (Standard 1,0) und `NACHBARSTROM_SCHENKUNG_GEBUEHR` (`ja` = Servicegebühr auch bei Schenkungen, Standard aus).
 
 FIX PV handelt als bevollmächtigter Dienstleister, nicht als Organisator.
 

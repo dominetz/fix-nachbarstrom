@@ -22,9 +22,6 @@ from app.models import (Anfrage, Art, Gruppe, GruppenStatus, Mitglied, Modell, P
 NB = "008100"  # Testkennung, kein echter Netzbetreiber
 JAHR_VON, JAHR_BIS = date(2025, 10, 1), date(2026, 9, 30)
 SELBST_TESTEN = "2026-09"  # dieser Monat wird nicht automatisch importiert
-# Einrichtungsgebühr der Testgruppen, wenn in den Einstellungen noch kein Betrag steht. Reiner
-# Testwert, kein Preisvorschlag.
-TEST_EINRICHTUNG_EUR = 100.0
 DATEIEN_AB = "2026-08"  # ab diesem Monat liegen die Exporte als Excel-Dateien im Ordner testdaten/
 
 
@@ -107,8 +104,8 @@ def anlegen(neu: bool = False) -> None:
         for nr, (e, ab, preis, monatlich, zone, status) in enumerate(GRUPPEN, start=1):
             menge = matching.geteilte_menge(leute[e], [leute[a] for a in ab])
             g = Gruppe(erwartete_kwh_jahr=round(sum(menge.values())), erzeuger_id=leute[e].id, status=status, zonelevel=zone, preis_ct_kwh=preis,
-                       rechnung_monatlich=monatlich, marktpartner_id=f"PP90000{nr}", gebuehr_ct_kwh=1.0,
-                       einrichtung_eur=config.EINRICHTUNG_EUR or TEST_EINRICHTUNG_EUR,
+                       rechnung_monatlich=monatlich, marktpartner_id=f"PP90000{nr}", gebuehr_ct_kwh=config.P2P_GEBUEHR_CT_KWH,
+                       einrichtung_eur=config.EINRICHTUNG_EUR,
                        # Gruppe 3: der Erzeuger stellt die Rechnungen selbst, wir verrechnen Einrichtung und Servicegebühr
                        modell=Modell.SELBST if nr == 3 else Modell.VERWALTET,
                        gemeinschafts_id=f"AT{NB}0000000000000000000TEST{nr:04d}",

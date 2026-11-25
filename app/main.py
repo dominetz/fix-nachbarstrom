@@ -584,7 +584,7 @@ def gruppe_anlegen(s: Session = Depends(sitzung), _=Depends(verwaltung),
         raise HTTPException(400, "Alle müssen beim selben Netzbetreiber sein.")
     menge = matching.geteilte_menge(e, abnehmer)
     g = Gruppe(erzeuger_id=e.id, zonelevel=max(zonen), erwartete_kwh_jahr=round(sum(menge.values())),
-               status=GruppenStatus.VERTRAG_OFFEN, gebuehr_ct_kwh=config.GEBUEHR_STANDARD_CT_KWH,
+               status=GruppenStatus.VERTRAG_OFFEN, gebuehr_ct_kwh=config.P2P_GEBUEHR_CT_KWH,
                einrichtung_eur=config.EINRICHTUNG_EUR, modell=Modell(config.P2P_MODELL))
     s.add(g)
     s.commit()

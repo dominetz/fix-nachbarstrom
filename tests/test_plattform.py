@@ -1053,18 +1053,21 @@ def test_p2p_einmalig_einrichtung(client, einmalig):
                                                                                 auth=auth).text  # Preis 0
     c.post(f"/verwaltung/gruppe/{gid}", auth=auth, data={"status": "vertrag_offen", "preis_ct_kwh": 10, "ust_satz": 0})
     seite = c.get(f"/verwaltung/gruppe/{gid}", auth=auth).text
-    assert "Einrichtungsgebühr" in seite and "Noch kein Betrag festgelegt" in seite
+    assert "Einrichtungsgebühr" in seite and "150,00 € netto. Verrechnet wird, sobald alle unterschrieben" in seite
     assert "Preisänderung ankündigen" not in seite and "Rechnungen erstellen" not in seite
     assert "Servicegebühr erstellen" in seite
     # Vor der Unterschrift wird nichts verrechnet
     assert c.post(f"/verwaltung/gruppe/{gid}/einrichtung", auth=auth).status_code == 400
 
-    # Betrag setzen, Gruppe aktiv: die Übersicht erinnert ans Verrechnen
-    c.post(f"/verwaltung/gruppe/{gid}", auth=auth, data={"status": "aktiv", "preis_ct_kwh": 10, "ust_satz": 0,
-                                                         "einrichtung_eur": 150})
+    # Vorschlag 150 € und 1,5 ct, je Gruppe änderbar. Gruppe aktiv: die Übersicht erinnert ans Verrechnen
     with Session(engine) as s:
         g = s.get(Gruppe, gid)
-        assert g.einrichtung_eur == 150 and g.gebuehr_ct_kwh == config.GEBUEHR_STANDARD_CT_KWH  # nicht überschrieben
+        assert (g.einrichtung_eur, g.gebuehr_ct_kwh) == (config.EINRICHTUNG_EUR, config.P2P_GEBUEHR_CT_KWH) == (150, 1.5)
+    c.post(f"/verwaltung/gruppe/{gid}", auth=auth, data={"status": "aktiv", "preis_ct_kwh": 10, "ust_satz": 0,
+                                                         "einrichtung_eur": 200})
+    with Session(engine) as s:
+        g = s.get(Gruppe, gid)
+        assert g.einrichtung_eur == 200 and g.gebuehr_ct_kwh == 1.5  # nicht überschrieben
     assert f"Einrichtung Gruppe {gid}" in c.get("/verwaltung", auth=auth).text
 
     r = c.post(f"/verwaltung/gruppe/{gid}/einrichtung", auth=auth, follow_redirects=False)
@@ -1072,7 +1075,7 @@ def test_p2p_einmalig_einrichtung(client, einmalig):
     with Session(engine) as s:
         x = s.exec(select(main.Gebuehr)).one()
     assert x.art == "einrichtung" and x.nummer == f"FIX-{gid:04d}-E" and x.empfaenger_id == 1
-    assert x.netto == 150 and x.brutto == pytest.approx(150 * (1 + config.DIENSTLEISTER_UST))
+    assert x.netto == 200 and x.brutto == pytest.approx(200 * (1 + config.DIENSTLEISTER_UST))
     assert f"Einrichtung Gruppe {gid}" not in c.get("/verwaltung", auth=auth).text
     # Nur einmal, Betrag danach fest
     assert c.post(f"/verwaltung/gruppe/{gid}/einrichtung", auth=auth).status_code == 400
